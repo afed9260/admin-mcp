@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dialogsQuerySchema, funnelQuerySchema, nudgeHistoryQuerySchema } from "../src/tools/schemas.js";
+import { costQuerySchema, dialogsQuerySchema, funnelQuerySchema, nudgeHistoryQuerySchema } from "../src/tools/schemas.js";
 
 describe("tool schemas", () => {
   it("defaults dialog pagination safely", () => {
@@ -19,5 +19,41 @@ describe("tool schemas", () => {
   it("defaults nudge history limit safely", () => {
     const parsed = nudgeHistoryQuerySchema.parse({ ruleId: "intro" });
     expect(parsed.limit).toBe(50);
+  });
+
+  it("rejects invalid calendar dates", () => {
+    expect(() => funnelQuerySchema.parse({ dateFrom: "2026-99-99" })).toThrow();
+    expect(() => funnelQuerySchema.parse({ dateFrom: "2026-02-31" })).toThrow();
+  });
+
+  it("accepts leap dates and rejects non-leap dates", () => {
+    expect(funnelQuerySchema.parse({ dateFrom: "2024-02-29" }).dateFrom).toBe("2024-02-29");
+    expect(() => funnelQuerySchema.parse({ dateFrom: "2025-02-29" })).toThrow();
+  });
+
+  it("omits whitespace-only optional text filters", () => {
+    const funnel = funnelQuerySchema.parse({ chainId: "   ", platform: "\t" });
+    expect(funnel.chainId).toBeUndefined();
+    expect(funnel.platform).toBeUndefined();
+
+    const cost = costQuerySchema.parse({ modelName: "   " });
+    expect(cost.modelName).toBeUndefined();
+
+    const dialogs = dialogsQuerySchema.parse({ funnelVersion: "   ", telegramUserId: "   ", search: "   " });
+    expect(dialogs.funnelVersion).toBeUndefined();
+    expect(dialogs.telegramUserId).toBeUndefined();
+    expect(dialogs.search).toBeUndefined();
+  });
+
+  it("rejects unknown dialog query keys", () => {
+    expect(() => dialogsQuerySchema.parse({ telegramUserID: "123" })).toThrow();
+  });
+
+  it("rejects invalid date ranges", () => {
+    expect(() => funnelQuerySchema.parse({ dateFrom: "2026-01-02", dateTo: "2026-01-01" })).toThrow();
+  });
+
+  it("rejects invalid dialog message ranges", () => {
+    expect(() => dialogsQuerySchema.parse({ messagesFrom: 5, messagesTo: 4 })).toThrow();
   });
 });
