@@ -16,6 +16,8 @@ pnpm verify
 pnpm dev
 ```
 
+Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
+
 ## Exposed Tools
 
 - `get_funnel_stats`
