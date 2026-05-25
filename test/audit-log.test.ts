@@ -61,6 +61,13 @@ describe("appendAuditEvent", () => {
     const content = await readFile(file, "utf8");
     expect(content).toContain("\"authorization\":\"[REDACTED]\"");
     expect(content).toContain("\"session_id\":\"[REDACTED]\"");
+    expect(content).toContain("\"auth\":\"[REDACTED]\"");
+    expect(content).toContain("\"apiKey\":\"[REDACTED]\"");
+    expect(content).toContain("\"api_key\":\"[REDACTED]\"");
+    expect(content).toContain("\"accessKey\":\"[REDACTED]\"");
+    expect(content).toContain("\"access_key\":\"[REDACTED]\"");
+    expect(content).toContain("\"jwt\":\"[REDACTED]\"");
+    expect(content).toContain("\"sessionId\":\"[REDACTED]\"");
     expect(content).not.toContain("nested-token");
     expect(content).not.toContain("session-id-secret");
     expect(content).not.toContain("cookie-secret");
@@ -75,6 +82,13 @@ describe("appendAuditEvent", () => {
       toolName: "list_dialogs",
       input: {
         authorizationHeader: "Authorization: Bearer abc",
+        bearerToken: "Bearer abc123",
+        passwordPair: "password=abc",
+        secretPair: "secret=def",
+        authorizationPair: "authorization=ghi",
+        secretHeader: "secret: xyz",
+        apiKeyHeader: "apiKey: key",
+        cookieHeader: "Cookie: sid=abc; sessionId=def",
         urls: [
           "https://malikbot.ru/new-admin?token=abc",
           "https://malikbot.ru/new-admin?api_key=abc",
@@ -90,10 +104,42 @@ describe("appendAuditEvent", () => {
 
     const content = await readFile(file, "utf8");
     expect(content).not.toContain("Bearer abc");
+    expect(content).not.toContain("abc123");
+    expect(content).not.toContain("password=abc");
+    expect(content).not.toContain("secret=def");
+    expect(content).not.toContain("authorization=ghi");
+    expect(content).not.toContain("secret: xyz");
+    expect(content).not.toContain("apiKey: key");
+    expect(content).not.toContain("sid=abc");
+    expect(content).not.toContain("sessionId=def");
     expect(content).not.toContain("token=abc");
     expect(content).not.toContain("api_key=abc");
     expect(content).not.toContain("access_token=abc");
     expect(content).not.toContain("jwt=abc");
     expect(content).not.toContain("sessionId=abc");
+  });
+
+  it("keeps non-secret author and authentication metadata visible", async () => {
+    dir = await mkdtemp(join(tmpdir(), "admin-mcp-"));
+    const file = join(dir, "audit.jsonl");
+
+    await appendAuditEvent(file, {
+      timestamp: "2026-05-25T00:00:00.000Z",
+      toolName: "list_dialogs",
+      input: {
+        authorName: "Ada",
+        authoredBy: "Grace",
+        authenticated: true,
+        auth: "secret",
+      },
+      endpoint: "/statistics/dialogs",
+      status: "success",
+    });
+
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("\"authorName\":\"Ada\"");
+    expect(content).toContain("\"authoredBy\":\"Grace\"");
+    expect(content).toContain("\"authenticated\":true");
+    expect(content).toContain("\"auth\":\"[REDACTED]\"");
   });
 });
