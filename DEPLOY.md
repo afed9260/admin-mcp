@@ -39,6 +39,8 @@ Use a read-only backend service token if the backend supports it. Do not commit 
 
 Add an MCP server entry to the Codex config on the machine that runs Codex.
 
+On Windows, this repository includes `scripts/run-admin-mcp.ps1`. The script maps `ADMIN_MCP_TOKEN` to `ADMIN_API_TOKEN` at runtime, so the admin token can stay in the user environment instead of being written into `config.toml`.
+
 Example for Linux:
 
 ```toml
@@ -57,17 +59,22 @@ Example for Windows:
 
 ```toml
 [mcp_servers.admin_mcp]
-command = "node"
-args = ["C:\\Users\\Arkadiy\\Desktop\\Аркадий\\ИИ-АГЕНТ\\админка\\admin-mcp\\dist\\index.js"]
+command = "powershell.exe"
+args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\Arkadiy\\Desktop\\Аркадий\\ИИ-АГЕНТ\\админка\\admin-mcp\\scripts\\run-admin-mcp.ps1"]
 startup_timeout_sec = 120
 
 [mcp_servers.admin_mcp.env]
 ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
-ADMIN_API_TOKEN = "replace-with-read-only-admin-token"
 AUDIT_LOG_PATH = "C:\\Users\\Arkadiy\\Desktop\\Аркадий\\ИИ-АГЕНТ\\админка\\admin-mcp\\audit\\admin-mcp.jsonl"
 ```
 
-Restart Codex after changing the MCP config.
+Set the token in the user environment and restart Codex:
+
+```powershell
+[Environment]::SetEnvironmentVariable("ADMIN_MCP_TOKEN", "replace-with-read-only-admin-token", "User")
+```
+
+Restart Codex after changing the MCP config or user environment.
 
 ## 5. Smoke Test
 
