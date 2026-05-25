@@ -38,7 +38,7 @@ describe("appendAuditEvent", () => {
 
     await appendAuditEvent(file, {
       timestamp: "2026-05-25T00:00:00.000Z",
-      toolName: "update_dialog",
+      toolName: "get_dialog",
       input: {
         nested: {
           authorization: "Bearer nested-token",
