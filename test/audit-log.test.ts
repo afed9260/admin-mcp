@@ -89,6 +89,9 @@ describe("appendAuditEvent", () => {
         secretHeader: "secret: xyz",
         apiKeyHeader: "apiKey: key",
         cookieHeader: "Cookie: sid=abc; sessionId=def",
+        basicAuthorizationHeader: "Authorization: Basic abc123",
+        tokenAuthorizationHeader: "Authorization: Token abc123",
+        plainAuthorizationHeader: "authorization: abc123",
         urls: [
           "https://malikbot.ru/new-admin?token=abc",
           "https://malikbot.ru/new-admin?api_key=abc",
@@ -117,6 +120,11 @@ describe("appendAuditEvent", () => {
     expect(content).not.toContain("access_token=abc");
     expect(content).not.toContain("jwt=abc");
     expect(content).not.toContain("sessionId=abc");
+    expect(content).not.toContain("Basic abc123");
+    expect(content).not.toContain("Token abc123");
+    expect(content).not.toContain("authorization: abc123");
+    expect(content).toContain("Authorization: [REDACTED]");
+    expect(content).toContain("authorization: [REDACTED]");
   });
 
   it("keeps non-secret author and authentication metadata visible", async () => {

@@ -14,6 +14,7 @@ const secretKeys = new Set([
 ]);
 const bearerPattern = /\b(?:Authorization\s*:\s*)?Bearer\s+[^\s"',;}\\]+/gi;
 const cookieHeaderPattern = /\bCookie\s*:\s*[^"',}\\]+/gi;
+const authorizationHeaderPattern = /\b(Authorization\s*:\s*)[^"',;}\\]+/gi;
 const secretColonPattern =
   /\b(password|secret|api[_-]?key|access[_-]?key|token|jwt|session[_-]?id|session)\s*:\s*[^\s"',;}\\]+/gi;
 const secretQueryParamPattern =
@@ -38,6 +39,7 @@ export function sanitizeForLog(value: unknown): unknown {
   if (typeof value === "string") {
     return value
       .replace(cookieHeaderPattern, "Cookie: [REDACTED]")
+      .replace(authorizationHeaderPattern, "$1[REDACTED]")
       .replace(bearerPattern, (match) =>
         match.toLowerCase().startsWith("authorization") ? "Authorization: Bearer [REDACTED]" : "Bearer [REDACTED]",
       )
