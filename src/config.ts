@@ -7,17 +7,30 @@ export type AdminMcpConfig = {
 type Env = Record<string, string | undefined>;
 
 export function loadConfig(env: Env = process.env): AdminMcpConfig {
-  const adminApiBaseUrl = env.ADMIN_API_BASE_URL?.replace(/\/$/, "");
+  const rawAdminApiBaseUrl = env.ADMIN_API_BASE_URL;
   const adminApiToken = env.ADMIN_API_TOKEN;
   const auditLogPath = env.AUDIT_LOG_PATH ?? "./audit/admin-mcp.jsonl";
 
-  if (!adminApiBaseUrl) {
+  if (!rawAdminApiBaseUrl) {
     throw new Error("ADMIN_API_BASE_URL is required");
+  }
+
+  let parsedAdminApiBaseUrl: URL;
+  try {
+    parsedAdminApiBaseUrl = new URL(rawAdminApiBaseUrl);
+  } catch {
+    throw new Error("ADMIN_API_BASE_URL must be a valid URL");
+  }
+
+  if (parsedAdminApiBaseUrl.protocol !== "https:") {
+    throw new Error("ADMIN_API_BASE_URL must use https");
   }
 
   if (!adminApiToken) {
     throw new Error("ADMIN_API_TOKEN is required");
   }
+
+  const adminApiBaseUrl = rawAdminApiBaseUrl.replace(/\/$/, "");
 
   return { adminApiBaseUrl, adminApiToken, auditLogPath };
 }

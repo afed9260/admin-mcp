@@ -31,4 +31,69 @@ describe("appendAuditEvent", () => {
     expect(content).toContain("\"toolName\":\"list_dialogs\"");
     expect(content).toContain("\"ADMIN_API_TOKEN\":\"[REDACTED]\"");
   });
+
+  it("redacts nested secret keys in objects and arrays", async () => {
+    dir = await mkdtemp(join(tmpdir(), "admin-mcp-"));
+    const file = join(dir, "audit.jsonl");
+
+    await appendAuditEvent(file, {
+      timestamp: "2026-05-25T00:00:00.000Z",
+      toolName: "update_dialog",
+      input: {
+        nested: {
+          authorization: "Bearer nested-token",
+          auth: "auth-secret",
+          apiKey: "api-key-secret",
+          api_key: "api-key-secret",
+          accessKey: "access-key-secret",
+          access_key: "access-key-secret",
+          jwt: "jwt-secret",
+          session: "session-secret",
+          sessionId: "session-id-secret",
+          session_id: "session-id-secret",
+          children: [{ password: "password-secret" }, { cookie: "cookie-secret" }],
+        },
+      },
+      endpoint: "/statistics/dialogs",
+      status: "success",
+    });
+
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("\"authorization\":\"[REDACTED]\"");
+    expect(content).toContain("\"session_id\":\"[REDACTED]\"");
+    expect(content).not.toContain("nested-token");
+    expect(content).not.toContain("session-id-secret");
+    expect(content).not.toContain("cookie-secret");
+  });
+
+  it("redacts secret-bearing string patterns", async () => {
+    dir = await mkdtemp(join(tmpdir(), "admin-mcp-"));
+    const file = join(dir, "audit.jsonl");
+
+    await appendAuditEvent(file, {
+      timestamp: "2026-05-25T00:00:00.000Z",
+      toolName: "list_dialogs",
+      input: {
+        authorizationHeader: "Authorization: Bearer abc",
+        urls: [
+          "https://malikbot.ru/new-admin?token=abc",
+          "https://malikbot.ru/new-admin?api_key=abc",
+          "https://malikbot.ru/new-admin?access_token=abc",
+          "https://malikbot.ru/new-admin?jwt=abc",
+          "https://malikbot.ru/new-admin?sessionId=abc",
+        ],
+      },
+      endpoint: "/statistics/dialogs",
+      status: "failure",
+      metadata: { reason: "Authorization: Bearer abc" },
+    });
+
+    const content = await readFile(file, "utf8");
+    expect(content).not.toContain("Bearer abc");
+    expect(content).not.toContain("token=abc");
+    expect(content).not.toContain("api_key=abc");
+    expect(content).not.toContain("access_token=abc");
+    expect(content).not.toContain("jwt=abc");
+    expect(content).not.toContain("sessionId=abc");
+  });
 });
