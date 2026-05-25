@@ -8,7 +8,7 @@ type Env = Record<string, string | undefined>;
 
 export function loadConfig(env: Env = process.env): AdminMcpConfig {
   const rawAdminApiBaseUrl = env.ADMIN_API_BASE_URL?.trim();
-  const adminApiToken = env.ADMIN_API_TOKEN;
+  const adminApiToken = env.ADMIN_API_TOKEN ?? env.ADMIN_MCP_TOKEN;
   const auditLogPath = env.AUDIT_LOG_PATH ?? "./audit/admin-mcp.jsonl";
 
   if (!rawAdminApiBaseUrl) {

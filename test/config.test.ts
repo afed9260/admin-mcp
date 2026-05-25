@@ -14,6 +14,15 @@ describe("loadConfig", () => {
     expect(config.auditLogPath).toBe("./audit/test.jsonl");
   });
 
+  it("uses ADMIN_MCP_TOKEN as a local Codex token alias", () => {
+    const config = loadConfig({
+      ADMIN_API_BASE_URL: "https://malikbot.ru/new-admin",
+      ADMIN_MCP_TOKEN: "token-from-codex-env",
+    });
+
+    expect(config.adminApiToken).toBe("token-from-codex-env");
+  });
+
   it("rejects missing token", () => {
     expect(() =>
       loadConfig({
