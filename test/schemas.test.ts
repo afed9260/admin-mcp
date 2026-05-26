@@ -56,4 +56,8 @@ describe("tool schemas", () => {
   it("rejects invalid dialog message ranges", () => {
     expect(() => dialogsQuerySchema.parse({ messagesFrom: 5, messagesTo: 4 })).toThrow();
   });
+
+  it("rejects invalid dialog cost ranges", () => {
+    expect(() => dialogsQuerySchema.parse({ costFrom: 20, costTo: 10 })).toThrow();
+  });
 });

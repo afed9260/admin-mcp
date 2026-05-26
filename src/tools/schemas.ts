@@ -57,6 +57,7 @@ export const dialogsQuerySchema = z
   .object({
     status: z.enum(["pending", "successful", "failed", "paused"]).optional(),
     funnelVersion: optionalText(200),
+    funnelVersionMissing: z.boolean().optional(),
     dateFrom: optionalDateString,
     dateTo: optionalDateString,
     telegramUserId: optionalText(40),
@@ -65,6 +66,8 @@ export const dialogsQuerySchema = z
     assistantReplied: z.boolean().optional(),
     messagesFrom: z.number().int().min(0).optional(),
     messagesTo: z.number().int().min(0).optional(),
+    costFrom: z.number().min(0).optional(),
+    costTo: z.number().min(0).optional(),
     page: z.number().int().min(1).default(1),
     limit: z.number().int().min(1).max(100).default(50),
   })
@@ -74,6 +77,10 @@ export const dialogsQuerySchema = z
     ({ messagesFrom, messagesTo }) =>
       messagesFrom === undefined || messagesTo === undefined || messagesFrom <= messagesTo,
     { path: ["messagesTo"] },
+  )
+  .refine(
+    ({ costFrom, costTo }) => costFrom === undefined || costTo === undefined || costFrom <= costTo,
+    { path: ["costTo"] },
   );
 
 export const dialogDetailQuerySchema = z

@@ -37,8 +37,18 @@ describe("readonly admin tools", () => {
     const client = createClient();
     const tools = createDialogTools(client);
 
-    await expect(tools.listDialogs({ status: "pending", page: 2, limit: 10, buyerReplied: true })).resolves.toEqual({
-      path: "/statistics/dialogs?status=pending&buyerReplied=true&page=2&limit=10",
+    await expect(
+      tools.listDialogs({
+        status: "failed",
+        funnelVersionMissing: true,
+        costFrom: 10,
+        costTo: 100,
+        page: 2,
+        limit: 10,
+        buyerReplied: true,
+      }),
+    ).resolves.toEqual({
+      path: "/statistics/dialogs?status=failed&funnelVersionMissing=true&buyerReplied=true&costFrom=10&costTo=100&page=2&limit=10",
     });
     await expect(tools.getDialog({ chatId: "chat/123" })).resolves.toEqual({
       path: "/statistics/dialogs/chat%2F123",
