@@ -6,6 +6,7 @@ import { AdminMcpConfig } from "../config.js";
 import { createDialogTools } from "./dialog-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
 import {
+  botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
   dialogDetailQuerySchema,
@@ -22,6 +23,7 @@ export const readonlyToolNames = [
   "list_dialogs",
   "get_dialog",
   "get_bot_funnel_stats",
+  "list_bot_funnel_customers",
   "list_nudge_rules",
   "get_nudge_rule_candidates",
   "get_nudge_history",
@@ -172,6 +174,23 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
     },
     (input) =>
       runWithAudit(config, "get_bot_funnel_stats", "/statistics/bot-funnel", input, statisticsTools.getBotFunnelStats),
+  );
+
+  server.registerTool(
+    "list_bot_funnel_customers",
+    {
+      description: "List readonly customers on bot onboarding funnel steps with filters and pagination.",
+      inputSchema: inputSchema(botFunnelCustomersQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_bot_funnel_customers",
+        "/statistics/bot-funnel-customers",
+        input,
+        statisticsTools.listBotFunnelCustomers,
+      ),
   );
 
   server.registerTool(

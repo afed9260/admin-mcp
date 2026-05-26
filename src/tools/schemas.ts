@@ -53,6 +53,23 @@ export const botFunnelQuerySchema = z
   .strict()
   .refine(hasValidDateRange, { path: ["dateTo"] });
 
+export const botFunnelCustomersQuerySchema = z
+  .object({
+    step: optionalText(120),
+    channel: optionalText(40),
+    dateFrom: optionalDateString,
+    dateTo: optionalDateString,
+    minStuckDays: z.number().int().min(0).optional(),
+    avitoConnected: z.boolean().optional(),
+    hasDialogs: z.boolean().optional(),
+    hasPayments: z.boolean().optional(),
+    search: boundedSearch,
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict()
+  .refine(hasValidDateRange, { path: ["dateTo"] });
+
 export const dialogsQuerySchema = z
   .object({
     status: z.enum(["pending", "successful", "failed", "paused"]).optional(),
@@ -105,6 +122,7 @@ export const nudgeHistoryQuerySchema = z
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
+export type BotFunnelCustomersQuery = z.infer<typeof botFunnelCustomersQuerySchema>;
 export type DialogsQuery = z.infer<typeof dialogsQuerySchema>;
 export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
