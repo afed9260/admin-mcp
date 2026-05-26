@@ -85,6 +85,7 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `list_dialogs`
 - `get_dialog`
 - `get_bot_funnel_stats`
+- `list_bot_funnel_customers`
 - `list_nudge_rules`
 - `get_nudge_rule_candidates`
 - `get_nudge_history`
@@ -94,6 +95,7 @@ Run low-risk read checks:
 ```text
 list_nudge_rules
 get_funnel_stats with groupBy=chain
+list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
 ```
 

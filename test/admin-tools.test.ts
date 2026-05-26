@@ -35,6 +35,8 @@ describe("readonly admin tools", () => {
       tools.listBotFunnelCustomers({
         avitoConnected: false,
         channel: "telegram",
+        hasDialogs: true,
+        hasPayments: true,
         limit: 10,
         minStuckDays: 3,
         page: 2,
@@ -42,7 +44,7 @@ describe("readonly admin tools", () => {
         step: "intro_shown",
       }),
     ).resolves.toEqual({
-      path: "/statistics/bot-funnel-customers?step=intro_shown&channel=telegram&minStuckDays=3&avitoConnected=false&search=ark&page=2&limit=10",
+      path: "/statistics/bot-funnel-customers?step=intro_shown&channel=telegram&minStuckDays=3&avitoConnected=false&hasDialogs=true&hasPayments=true&search=ark&page=2&limit=10",
     });
   });
 

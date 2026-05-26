@@ -33,6 +33,12 @@ describe("tool schemas", () => {
     expect(parsed.limit).toBe(50);
   });
 
+  it("accepts bot funnel customer business segment flags", () => {
+    const parsed = botFunnelCustomersQuerySchema.parse({ hasDialogs: true, hasPayments: true });
+    expect(parsed.hasDialogs).toBe(true);
+    expect(parsed.hasPayments).toBe(true);
+  });
+
   it("rejects invalid bot funnel customer stuck days", () => {
     expect(() => botFunnelCustomersQuerySchema.parse({ minStuckDays: -1 })).toThrow();
   });

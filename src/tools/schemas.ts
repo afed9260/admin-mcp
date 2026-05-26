@@ -61,6 +61,8 @@ export const botFunnelCustomersQuerySchema = z
     dateTo: optionalDateString,
     minStuckDays: z.number().int().min(0).optional(),
     avitoConnected: z.boolean().optional(),
+    hasDialogs: z.boolean().optional(),
+    hasPayments: z.boolean().optional(),
     search: boundedSearch,
     page: z.number().int().min(1).default(1),
     limit: z.number().int().min(1).max(100).default(50),
