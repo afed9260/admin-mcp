@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { costQuerySchema, dialogsQuerySchema, funnelQuerySchema, nudgeHistoryQuerySchema } from "../src/tools/schemas.js";
+import {
+  botFunnelCustomersQuerySchema,
+  costQuerySchema,
+  dialogsQuerySchema,
+  funnelQuerySchema,
+  nudgeHistoryQuerySchema,
+} from "../src/tools/schemas.js";
 
 describe("tool schemas", () => {
   it("defaults dialog pagination safely", () => {
@@ -19,6 +25,16 @@ describe("tool schemas", () => {
   it("defaults nudge history limit safely", () => {
     const parsed = nudgeHistoryQuerySchema.parse({ ruleId: "intro" });
     expect(parsed.limit).toBe(50);
+  });
+
+  it("defaults bot funnel customer pagination safely", () => {
+    const parsed = botFunnelCustomersQuerySchema.parse({});
+    expect(parsed.page).toBe(1);
+    expect(parsed.limit).toBe(50);
+  });
+
+  it("rejects invalid bot funnel customer stuck days", () => {
+    expect(() => botFunnelCustomersQuerySchema.parse({ minStuckDays: -1 })).toThrow();
   });
 
   it("rejects invalid calendar dates", () => {

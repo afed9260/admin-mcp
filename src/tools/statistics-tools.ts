@@ -1,6 +1,6 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
-import { botFunnelQuerySchema, costQuerySchema, funnelQuerySchema } from "./schemas.js";
+import { botFunnelCustomersQuerySchema, botFunnelQuerySchema, costQuerySchema, funnelQuerySchema } from "./schemas.js";
 
 export function createStatisticsTools(client: AdminApiClient) {
   function withEndOfDay(dateTo: string | undefined) {
@@ -31,6 +31,11 @@ export function createStatisticsTools(client: AdminApiClient) {
     async getBotFunnelStats(input: unknown) {
       const query = botFunnelQuerySchema.parse(input);
       return client.get(`/statistics/bot-funnel?${toSearchParams(query)}`);
+    },
+
+    async listBotFunnelCustomers(input: unknown) {
+      const query = botFunnelCustomersQuerySchema.parse(input);
+      return client.get(`/statistics/bot-funnel-customers?${toSearchParams(query)}`);
     },
   };
 }

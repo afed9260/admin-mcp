@@ -31,6 +31,19 @@ describe("readonly admin tools", () => {
     await expect(tools.getBotFunnelStats({ dateTo: "2026-01-03" })).resolves.toEqual({
       path: "/statistics/bot-funnel?dateTo=2026-01-03",
     });
+    await expect(
+      tools.listBotFunnelCustomers({
+        avitoConnected: false,
+        channel: "telegram",
+        limit: 10,
+        minStuckDays: 3,
+        page: 2,
+        search: "ark",
+        step: "intro_shown",
+      }),
+    ).resolves.toEqual({
+      path: "/statistics/bot-funnel-customers?step=intro_shown&channel=telegram&minStuckDays=3&avitoConnected=false&search=ark&page=2&limit=10",
+    });
   });
 
   it("requests dialog list and detail endpoints", async () => {
