@@ -22,6 +22,12 @@ const dateString = z
   });
 const optionalDateString = dateString.optional();
 const boundedSearch = optionalText(200);
+const paidActivationSegment = z
+  .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs"])
+  .optional();
+const paidLifecycleStage = z
+  .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs", "active_recently", "inactive_30d"])
+  .optional();
 
 export const funnelQuerySchema = z
   .object({
@@ -55,14 +61,17 @@ export const botFunnelQuerySchema = z
 
 export const botFunnelCustomersQuerySchema = z
   .object({
+    activationSegment: paidActivationSegment,
     step: optionalText(120),
     channel: optionalText(40),
     dateFrom: optionalDateString,
     dateTo: optionalDateString,
     minStuckDays: z.number().int().min(0).optional(),
     avitoConnected: z.boolean().optional(),
+    hasAvito: z.boolean().optional(),
     hasDialogs: z.boolean().optional(),
     hasPayments: z.boolean().optional(),
+    paidLifecycleStage,
     search: boundedSearch,
     page: z.number().int().min(1).default(1),
     limit: z.number().int().min(1).max(100).default(50),

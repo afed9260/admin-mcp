@@ -179,7 +179,8 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
   server.registerTool(
     "list_bot_funnel_customers",
     {
-      description: "List readonly customers on bot onboarding funnel steps with filters and pagination.",
+      description:
+        "List readonly customers on bot onboarding funnel steps with filters, pagination, and paid customer lifecycle diagnostics.",
       inputSchema: inputSchema(botFunnelCustomersQuerySchema),
       annotations: readOnlyAnnotations,
     },

@@ -34,9 +34,21 @@ describe("tool schemas", () => {
   });
 
   it("accepts bot funnel customer business segment flags", () => {
-    const parsed = botFunnelCustomersQuerySchema.parse({ hasDialogs: true, hasPayments: true });
+    const parsed = botFunnelCustomersQuerySchema.parse({
+      activationSegment: "paid_avito_no_dialogs",
+      hasDialogs: true,
+      hasPayments: true,
+      paidLifecycleStage: "inactive_30d",
+    });
+    expect(parsed.activationSegment).toBe("paid_avito_no_dialogs");
     expect(parsed.hasDialogs).toBe(true);
     expect(parsed.hasPayments).toBe(true);
+    expect(parsed.paidLifecycleStage).toBe("inactive_30d");
+  });
+
+  it("rejects unknown bot funnel paid lifecycle filters", () => {
+    expect(() => botFunnelCustomersQuerySchema.parse({ activationSegment: "paid_magic" })).toThrow();
+    expect(() => botFunnelCustomersQuerySchema.parse({ paidLifecycleStage: "sleepy" })).toThrow();
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {

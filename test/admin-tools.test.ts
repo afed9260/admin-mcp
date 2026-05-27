@@ -33,6 +33,7 @@ describe("readonly admin tools", () => {
     });
     await expect(
       tools.listBotFunnelCustomers({
+        activationSegment: "paid_avito_no_dialogs",
         avitoConnected: false,
         channel: "telegram",
         hasDialogs: true,
@@ -40,11 +41,12 @@ describe("readonly admin tools", () => {
         limit: 10,
         minStuckDays: 3,
         page: 2,
+        paidLifecycleStage: "inactive_30d",
         search: "ark",
         step: "intro_shown",
       }),
     ).resolves.toEqual({
-      path: "/statistics/bot-funnel-customers?step=intro_shown&channel=telegram&minStuckDays=3&avitoConnected=false&hasDialogs=true&hasPayments=true&search=ark&page=2&limit=10",
+      path: "/statistics/bot-funnel-customers?activationSegment=paid_avito_no_dialogs&step=intro_shown&channel=telegram&minStuckDays=3&avitoConnected=false&hasDialogs=true&hasPayments=true&paidLifecycleStage=inactive_30d&search=ark&page=2&limit=10",
     });
   });
 
