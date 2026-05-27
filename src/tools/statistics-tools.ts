@@ -1,6 +1,12 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
-import { botFunnelCustomersQuerySchema, botFunnelQuerySchema, costQuerySchema, funnelQuerySchema } from "./schemas.js";
+import {
+  botFunnelCustomersQuerySchema,
+  botFunnelQuerySchema,
+  costQuerySchema,
+  dataTruthAuditDetailsQuerySchema,
+  funnelQuerySchema,
+} from "./schemas.js";
 
 export function createStatisticsTools(client: AdminApiClient) {
   function withEndOfDay(dateTo: string | undefined) {
@@ -35,6 +41,11 @@ export function createStatisticsTools(client: AdminApiClient) {
 
     async getDataTruthAudit() {
       return client.get("/statistics/data-truth-audit");
+    },
+
+    async listDataTruthAuditDetails(input: unknown) {
+      const query = dataTruthAuditDetailsQuerySchema.parse(input);
+      return client.get(`/statistics/data-truth-audit/details?${toSearchParams(query)}`);
     },
 
     async listBotFunnelCustomers(input: unknown) {

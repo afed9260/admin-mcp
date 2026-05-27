@@ -35,6 +35,15 @@ describe("readonly admin tools", () => {
       path: "/statistics/data-truth-audit",
     });
     await expect(
+      tools.listDataTruthAuditDetails({
+        bucket: "meeting_without_charge",
+        page: 2,
+        limit: 25,
+      }),
+    ).resolves.toEqual({
+      path: "/statistics/data-truth-audit/details?bucket=meeting_without_charge&page=2&limit=25",
+    });
+    await expect(
       tools.listBotFunnelCustomers({
         activationSegment: "paid_avito_no_dialogs",
         avitoConnected: false,

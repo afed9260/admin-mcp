@@ -26,6 +26,7 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `get_dialog`
 - `get_bot_funnel_stats`
 - `get_data_truth_audit`
+- `list_data_truth_audit_details`
 - `list_bot_funnel_customers`
 - `list_nudge_rules`
 - `get_nudge_rule_candidates`

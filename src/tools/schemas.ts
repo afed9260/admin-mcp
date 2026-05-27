@@ -28,6 +28,16 @@ const paidActivationSegment = z
 const paidLifecycleStage = z
   .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs", "active_recently", "inactive_30d"])
   .optional();
+const dataTruthAuditBucket = z.enum([
+  "meeting_without_charge",
+  "charge_without_meeting",
+  "duplicate_charge_chats",
+  "failed_charge_rows",
+  "free_launch_meetings_charged",
+  "meeting_without_status_success",
+  "status_success_without_meeting",
+  "needs_review",
+]);
 
 export const funnelQuerySchema = z
   .object({
@@ -78,6 +88,14 @@ export const botFunnelCustomersQuerySchema = z
   })
   .strict()
   .refine(hasValidDateRange, { path: ["dateTo"] });
+
+export const dataTruthAuditDetailsQuerySchema = z
+  .object({
+    bucket: dataTruthAuditBucket.default("needs_review"),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict();
 
 export const dialogsQuerySchema = z
   .object({
@@ -132,6 +150,7 @@ export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
 export type BotFunnelCustomersQuery = z.infer<typeof botFunnelCustomersQuerySchema>;
+export type DataTruthAuditDetailsQuery = z.infer<typeof dataTruthAuditDetailsQuerySchema>;
 export type DialogsQuery = z.infer<typeof dialogsQuerySchema>;
 export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;

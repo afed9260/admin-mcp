@@ -9,6 +9,7 @@ import {
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
+  dataTruthAuditDetailsQuerySchema,
   dialogDetailQuerySchema,
   dialogsQuerySchema,
   funnelQuerySchema,
@@ -24,6 +25,7 @@ export const readonlyToolNames = [
   "get_dialog",
   "get_bot_funnel_stats",
   "get_data_truth_audit",
+  "list_data_truth_audit_details",
   "list_bot_funnel_customers",
   "list_nudge_rules",
   "get_nudge_rule_candidates",
@@ -192,6 +194,24 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
         "/statistics/data-truth-audit",
         input,
         () => statisticsTools.getDataTruthAudit(),
+      ),
+  );
+
+  server.registerTool(
+    "list_data_truth_audit_details",
+    {
+      description:
+        "List readonly drill-down rows for data truth audit buckets such as meeting_without_charge, failed_charge_rows, and free_launch_meetings_charged.",
+      inputSchema: inputSchema(dataTruthAuditDetailsQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_data_truth_audit_details",
+        "/statistics/data-truth-audit/details",
+        input,
+        statisticsTools.listDataTruthAuditDetails,
       ),
   );
 
