@@ -33,6 +33,10 @@ export function createStatisticsTools(client: AdminApiClient) {
       return client.get(`/statistics/bot-funnel?${toSearchParams(query)}`);
     },
 
+    async getDataTruthAudit() {
+      return client.get("/statistics/data-truth-audit");
+    },
+
     async listBotFunnelCustomers(input: unknown) {
       const query = botFunnelCustomersQuerySchema.parse(input);
       return client.get(`/statistics/bot-funnel-customers?${toSearchParams(query)}`);

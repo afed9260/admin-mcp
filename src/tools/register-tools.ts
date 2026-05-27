@@ -23,6 +23,7 @@ export const readonlyToolNames = [
   "list_dialogs",
   "get_dialog",
   "get_bot_funnel_stats",
+  "get_data_truth_audit",
   "list_bot_funnel_customers",
   "list_nudge_rules",
   "get_nudge_rule_candidates",
@@ -174,6 +175,24 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
     },
     (input) =>
       runWithAudit(config, "get_bot_funnel_stats", "/statistics/bot-funnel", input, statisticsTools.getBotFunnelStats),
+  );
+
+  server.registerTool(
+    "get_data_truth_audit",
+    {
+      description:
+        "Get readonly data truth audit comparing scheduled meetings, successful chat status, charges, payments, costs, and paid activation segments.",
+      inputSchema: z.object({}).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_data_truth_audit",
+        "/statistics/data-truth-audit",
+        input,
+        () => statisticsTools.getDataTruthAudit(),
+      ),
   );
 
   server.registerTool(

@@ -31,6 +31,9 @@ describe("readonly admin tools", () => {
     await expect(tools.getBotFunnelStats({ dateTo: "2026-01-03" })).resolves.toEqual({
       path: "/statistics/bot-funnel?dateTo=2026-01-03",
     });
+    await expect(tools.getDataTruthAudit()).resolves.toEqual({
+      path: "/statistics/data-truth-audit",
+    });
     await expect(
       tools.listBotFunnelCustomers({
         activationSegment: "paid_avito_no_dialogs",
