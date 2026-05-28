@@ -2,6 +2,7 @@ export type AdminMcpConfig = {
   adminApiBaseUrl: string;
   adminApiToken: string;
   auditLogPath: string;
+  enableWriteTools: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -10,6 +11,7 @@ export function loadConfig(env: Env = process.env): AdminMcpConfig {
   const rawAdminApiBaseUrl = env.ADMIN_API_BASE_URL?.trim();
   const adminApiToken = env.ADMIN_API_TOKEN ?? env.ADMIN_MCP_TOKEN;
   const auditLogPath = env.AUDIT_LOG_PATH ?? "./audit/admin-mcp.jsonl";
+  const enableWriteTools = env.ADMIN_MCP_ENABLE_WRITE === "true";
 
   if (!rawAdminApiBaseUrl) {
     throw new Error("ADMIN_API_BASE_URL is required");
@@ -44,5 +46,5 @@ export function loadConfig(env: Env = process.env): AdminMcpConfig {
 
   const adminApiBaseUrl = parsedAdminApiBaseUrl.href.replace(/\/$/, "");
 
-  return { adminApiBaseUrl, adminApiToken, auditLogPath };
+  return { adminApiBaseUrl, adminApiToken, auditLogPath, enableWriteTools };
 }

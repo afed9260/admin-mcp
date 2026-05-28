@@ -158,6 +158,58 @@ describe("AdminApiClient", () => {
     await expect(client.get("/nudge/rules")).resolves.toBeUndefined();
   });
 
+  it("sends JSON mutation requests with bearer auth", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+
+    const client = new AdminApiClient({
+      baseUrl: "https://malikbot.ru/new-admin",
+      token: "secret",
+      fetchImpl: fetchMock,
+    });
+
+    await client.put("/nudge/rules/rule-1", { messageText: "Updated" });
+    await client.post("/nudge/rules/rule-1/test-send", { telegramUserId: 123 });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://malikbot.ru/new-admin/nudge/rules/rule-1", {
+      body: JSON.stringify({ messageText: "Updated" }),
+      headers: { Authorization: "Bearer secret", "Content-Type": "application/json" },
+      method: "PUT",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://malikbot.ru/new-admin/nudge/rules/rule-1/test-send", {
+      body: JSON.stringify({ telegramUserId: 123 }),
+      headers: { Authorization: "Bearer secret", "Content-Type": "application/json" },
+      method: "POST",
+    });
+  });
+
+  it("sends multipart mutation requests without forcing a JSON content type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ url: "https://example.test/photo.png" }),
+    });
+
+    const client = new AdminApiClient({
+      baseUrl: "https://malikbot.ru/new-admin",
+      token: "secret",
+      fetchImpl: fetchMock,
+    });
+    const form = new FormData();
+    form.append("file", new Blob(["photo"], { type: "image/png" }), "photo.png");
+
+    await client.postForm("/nudge/upload-photo", form);
+
+    expect(fetchMock).toHaveBeenCalledWith("https://malikbot.ru/new-admin/nudge/upload-photo", {
+      body: form,
+      headers: { Authorization: "Bearer secret" },
+      method: "POST",
+    });
+  });
+
   it("throws normalized backend errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,

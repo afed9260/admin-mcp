@@ -9,11 +9,15 @@ import {
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
+  dataTruthAuditDetailsQuerySchema,
   dialogDetailQuerySchema,
   dialogsQuerySchema,
   funnelQuerySchema,
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
+  nudgePhotoUploadSchema,
+  nudgeRuleUpdateSchema,
+  nudgeTestSendSchema,
 } from "./schemas.js";
 import { createStatisticsTools } from "./statistics-tools.js";
 
@@ -23,16 +27,26 @@ export const readonlyToolNames = [
   "list_dialogs",
   "get_dialog",
   "get_bot_funnel_stats",
+  "get_data_truth_audit",
+  "list_data_truth_audit_details",
   "list_bot_funnel_customers",
   "list_nudge_rules",
   "get_nudge_rule_candidates",
   "get_nudge_history",
 ] as const;
 
-type ToolName = (typeof readonlyToolNames)[number];
+export const writeToolNames = ["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"] as const;
+
+type ToolName = (typeof readonlyToolNames)[number] | (typeof writeToolNames)[number];
 
 const readOnlyAnnotations = {
   readOnlyHint: true,
+  destructiveHint: false,
+  openWorldHint: true,
+} as const;
+
+const writeAnnotations = {
+  readOnlyHint: false,
   destructiveHint: false,
   openWorldHint: true,
 } as const;
@@ -89,6 +103,17 @@ function failureMetadata(error: unknown): Record<string, unknown> {
   return { error: error instanceof Error ? error.message : String(error) };
 }
 
+function auditInput(toolName: ToolName, input: unknown): unknown {
+  if (toolName !== "upload_nudge_photo" || !input || typeof input !== "object") {
+    return input;
+  }
+
+  return {
+    ...(input as Record<string, unknown>),
+    fileDataBase64: "[BASE64_FILE_BYTES_REDACTED]",
+  };
+}
+
 async function runWithAudit(
   config: AdminMcpConfig,
   toolName: ToolName,
@@ -101,7 +126,7 @@ async function runWithAudit(
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
       toolName,
-      input,
+      input: auditInput(toolName, input),
       endpoint,
       status: "success",
       metadata: successMetadata(data),
@@ -111,7 +136,7 @@ async function runWithAudit(
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
       toolName,
-      input,
+      input: auditInput(toolName, input),
       endpoint,
       status: "failure",
       metadata: failureMetadata(error),
@@ -120,7 +145,7 @@ async function runWithAudit(
   }
 }
 
-export function registerReadOnlyTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
   const nudgeTools = createNudgeTools(client);
@@ -177,9 +202,46 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
   );
 
   server.registerTool(
+    "get_data_truth_audit",
+    {
+      description:
+        "Get readonly data truth audit comparing scheduled meetings, successful chat status, charges, payments, costs, and paid activation segments.",
+      inputSchema: z.object({}).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_data_truth_audit",
+        "/statistics/data-truth-audit",
+        input,
+        () => statisticsTools.getDataTruthAudit(),
+      ),
+  );
+
+  server.registerTool(
+    "list_data_truth_audit_details",
+    {
+      description:
+        "List readonly drill-down rows for data truth audit buckets such as meeting_without_charge, failed_charge_rows, and free_launch_meetings_charged.",
+      inputSchema: inputSchema(dataTruthAuditDetailsQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_data_truth_audit_details",
+        "/statistics/data-truth-audit/details",
+        input,
+        statisticsTools.listDataTruthAuditDetails,
+      ),
+  );
+
+  server.registerTool(
     "list_bot_funnel_customers",
     {
-      description: "List readonly customers on bot onboarding funnel steps with filters and pagination.",
+      description:
+        "List readonly customers on bot onboarding funnel steps with filters, pagination, and paid customer lifecycle diagnostics.",
       inputSchema: inputSchema(botFunnelCustomersQuerySchema),
       annotations: readOnlyAnnotations,
     },
@@ -229,4 +291,44 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
     },
     (input) => runWithAudit(config, "get_nudge_history", "/nudge/history", input, nudgeTools.getNudgeHistory),
   );
+
+  if (!config.enableWriteTools) {
+    return;
+  }
+
+  server.registerTool(
+    "update_nudge_rule",
+    {
+      description:
+        "Update an existing nudge rule. Requires confirm=true and reason. Only provided fields are changed.",
+      inputSchema: inputSchema(nudgeRuleUpdateSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "update_nudge_rule", "/nudge/rules/{ruleId}", input, nudgeTools.updateNudgeRule),
+  );
+
+  server.registerTool(
+    "upload_nudge_photo",
+    {
+      description:
+        "Upload a nudge photo through the admin backend. Requires base64 file data, confirm=true, and reason.",
+      inputSchema: inputSchema(nudgePhotoUploadSchema),
+      annotations: writeAnnotations,
+    },
+    (input) => runWithAudit(config, "upload_nudge_photo", "/nudge/upload-photo", input, nudgeTools.uploadNudgePhoto),
+  );
+
+  server.registerTool(
+    "send_nudge_test",
+    {
+      description: "Send a test nudge message to a Telegram user. Requires confirm=true and reason.",
+      inputSchema: inputSchema(nudgeTestSendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "send_nudge_test", "/nudge/rules/{ruleId}/test-send", input, nudgeTools.sendNudgeTest),
+  );
 }
+
+export const registerReadOnlyTools = registerAdminTools;

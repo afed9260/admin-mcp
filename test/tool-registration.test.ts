@@ -1,16 +1,20 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminApiClient } from "../src/backend/admin-api-client.js";
 import { AdminMcpConfig } from "../src/config.js";
 import { createAdminMcpServer } from "../src/server.js";
-import { registerReadOnlyTools, readonlyToolNames } from "../src/tools/register-tools.js";
+import { registerAdminTools, readonlyToolNames, writeToolNames } from "../src/tools/register-tools.js";
 
 const config: AdminMcpConfig = {
   adminApiBaseUrl: "https://malikbot.ru/new-admin",
   adminApiToken: "dummy",
   auditLogPath: "./audit/test-tool-registration.jsonl",
+  enableWriteTools: false,
 };
 
 const servers: McpServer[] = [];
@@ -46,6 +50,8 @@ describe("readonlyToolNames", () => {
       "list_dialogs",
       "get_dialog",
       "get_bot_funnel_stats",
+      "get_data_truth_audit",
+      "list_data_truth_audit_details",
       "list_bot_funnel_customers",
       "list_nudge_rules",
       "get_nudge_rule_candidates",
@@ -53,6 +59,12 @@ describe("readonlyToolNames", () => {
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
+  });
+});
+
+describe("writeToolNames", () => {
+  it("contains only the first guarded nudge write tools", () => {
+    expect(writeToolNames).toEqual(["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"]);
   });
 });
 
@@ -64,6 +76,65 @@ describe("createAdminMcpServer", () => {
     const { tools } = await client.listTools();
 
     expect(tools.map((tool) => tool.name)).toEqual(readonlyToolNames);
+  });
+
+  it("registers nudge write tools only when explicitly enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    await expect(disabledClient.listTools()).resolves.toMatchObject({
+      tools: expect.arrayContaining(readonlyToolNames.map((name) => expect.objectContaining({ name }))),
+    });
+    expect((await disabledClient.listTools()).tools.map((tool) => tool.name)).not.toEqual(
+      expect.arrayContaining([...writeToolNames]),
+    );
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    expect((await enabledClient.listTools()).tools.map((tool) => tool.name)).toEqual([
+      ...readonlyToolNames,
+      ...writeToolNames,
+    ]);
+  });
+
+  it("publishes guarded mutation annotations for write tools", async () => {
+    const client = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const { tools } = await client.listTools();
+
+    for (const tool of tools.filter((item) => writeToolNames.includes(item.name as (typeof writeToolNames)[number]))) {
+      expect(tool.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      });
+    }
+  });
+
+  it("redacts uploaded file bytes from mutation audit logs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "admin-mcp-tool-audit-"));
+    const auditLogPath = join(dir, "audit.jsonl");
+    const server = new McpServer({ name: "admin-mcp-test", version: "0.0.0" });
+    const client = {
+      get: vi.fn(),
+      postForm: vi.fn(async () => ({ url: "https://malikbot.ru/new-admin/nudge/photos/photo.png" })),
+    } as unknown as AdminApiClient;
+    registerAdminTools(server, client, { ...config, auditLogPath, enableWriteTools: true });
+
+    const mcpClient = await connect(server);
+    const fileDataBase64 = Buffer.from("raw-photo-bytes").toString("base64");
+
+    await mcpClient.callTool({
+      name: "upload_nudge_photo",
+      arguments: {
+        confirm: true,
+        fileDataBase64,
+        fileName: "photo.png",
+        mimeType: "image/png",
+        reason: "audit redaction test",
+      },
+    });
+
+    const auditLog = await readFile(auditLogPath, "utf8");
+
+    expect(auditLog).not.toContain(fileDataBase64);
+    expect(auditLog).toContain("[BASE64_FILE_BYTES_REDACTED]");
   });
 
   it("publishes readonly annotations for every tool", async () => {
@@ -99,7 +170,7 @@ describe("createAdminMcpServer", () => {
     const server = new McpServer({ name: "admin-mcp-test", version: "0.0.0" });
     const client = createClient([{ id: "rule-1" }]);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    registerReadOnlyTools(server, client, { ...config, auditLogPath: "\0bad-audit-path" });
+    registerAdminTools(server, client, { ...config, auditLogPath: "\0bad-audit-path" });
 
     const mcpClient = await connect(server);
     const result = await mcpClient.callTool({
@@ -119,7 +190,7 @@ describe("createAdminMcpServer", () => {
       }),
     } as unknown as AdminApiClient;
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    registerReadOnlyTools(server, client, { ...config, auditLogPath: "\0bad-audit-path" });
+    registerAdminTools(server, client, { ...config, auditLogPath: "\0bad-audit-path" });
 
     const mcpClient = await connect(server);
 

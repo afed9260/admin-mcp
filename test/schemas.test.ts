@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   botFunnelCustomersQuerySchema,
   costQuerySchema,
+  dataTruthAuditDetailsQuerySchema,
   dialogsQuerySchema,
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
@@ -34,13 +35,40 @@ describe("tool schemas", () => {
   });
 
   it("accepts bot funnel customer business segment flags", () => {
-    const parsed = botFunnelCustomersQuerySchema.parse({ hasDialogs: true, hasPayments: true });
+    const parsed = botFunnelCustomersQuerySchema.parse({
+      activationSegment: "paid_avito_no_dialogs",
+      hasDialogs: true,
+      hasPayments: true,
+      paidLifecycleStage: "inactive_30d",
+    });
+    expect(parsed.activationSegment).toBe("paid_avito_no_dialogs");
     expect(parsed.hasDialogs).toBe(true);
     expect(parsed.hasPayments).toBe(true);
+    expect(parsed.paidLifecycleStage).toBe("inactive_30d");
+  });
+
+  it("rejects unknown bot funnel paid lifecycle filters", () => {
+    expect(() => botFunnelCustomersQuerySchema.parse({ activationSegment: "paid_magic" })).toThrow();
+    expect(() => botFunnelCustomersQuerySchema.parse({ paidLifecycleStage: "sleepy" })).toThrow();
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {
     expect(() => botFunnelCustomersQuerySchema.parse({ minStuckDays: -1 })).toThrow();
+  });
+
+  it("defaults and validates data truth audit detail bucket filters", () => {
+    const parsed = dataTruthAuditDetailsQuerySchema.parse({});
+    expect(parsed.bucket).toBe("needs_review");
+    expect(parsed.page).toBe(1);
+    expect(parsed.limit).toBe(50);
+
+    expect(
+      dataTruthAuditDetailsQuerySchema.parse({
+        bucket: "free_launch_meetings_charged",
+        limit: 10,
+      }).bucket,
+    ).toBe("free_launch_meetings_charged");
+    expect(() => dataTruthAuditDetailsQuerySchema.parse({ bucket: "unknown_bucket" })).toThrow();
   });
 
   it("rejects invalid calendar dates", () => {

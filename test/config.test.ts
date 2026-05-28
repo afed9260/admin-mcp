@@ -23,6 +23,23 @@ describe("loadConfig", () => {
     expect(config.adminApiToken).toBe("token-from-codex-env");
   });
 
+  it("keeps write tools disabled unless explicitly enabled", () => {
+    expect(
+      loadConfig({
+        ADMIN_API_BASE_URL: "https://malikbot.ru/new-admin",
+        ADMIN_API_TOKEN: "token",
+      }).enableWriteTools,
+    ).toBe(false);
+
+    expect(
+      loadConfig({
+        ADMIN_API_BASE_URL: "https://malikbot.ru/new-admin",
+        ADMIN_API_TOKEN: "token",
+        ADMIN_MCP_ENABLE_WRITE: "true",
+      }).enableWriteTools,
+    ).toBe(true);
+  });
+
   it("rejects missing token", () => {
     expect(() =>
       loadConfig({

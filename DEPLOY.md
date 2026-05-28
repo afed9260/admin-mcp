@@ -1,6 +1,7 @@
 # admin-mcp Deploy Guide
 
-This service is a read-only MCP server for MalikBot admin data.
+This service is an MCP server for MalikBot admin data. By default it exposes read-only tools only.
+Guarded nudge write tools are exposed only when `ADMIN_MCP_ENABLE_WRITE=true`.
 
 Current transport: stdio.
 
@@ -31,9 +32,10 @@ Set these values in the MCP client config or process environment:
 ADMIN_API_BASE_URL=https://malikbot.ru/new-admin
 ADMIN_API_TOKEN=replace-with-read-only-admin-token
 AUDIT_LOG_PATH=/var/log/admin-mcp/admin-mcp.jsonl
+ADMIN_MCP_ENABLE_WRITE=false
 ```
 
-Use a read-only backend service token if the backend supports it. Do not commit or paste the token into prompts.
+Use a read-only backend service token if the backend supports it. If write tools are enabled, the token must have the matching admin permissions. Do not commit or paste the token into prompts.
 
 ## 4. Codex MCP Config Example
 
@@ -53,6 +55,7 @@ startup_timeout_sec = 120
 ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
 ADMIN_API_TOKEN = "replace-with-read-only-admin-token"
 AUDIT_LOG_PATH = "/var/log/admin-mcp/admin-mcp.jsonl"
+ADMIN_MCP_ENABLE_WRITE = "false"
 ```
 
 Example for Windows:
@@ -66,6 +69,7 @@ startup_timeout_sec = 120
 [mcp_servers.admin_mcp.env]
 ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
 AUDIT_LOG_PATH = "C:\\Users\\Arkadiy\\Desktop\\Аркадий\\ИИ-АГЕНТ\\админка\\admin-mcp\\audit\\admin-mcp.jsonl"
+ADMIN_MCP_ENABLE_WRITE = "false"
 ```
 
 Set the token in the user environment and restart Codex:
@@ -85,16 +89,26 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `list_dialogs`
 - `get_dialog`
 - `get_bot_funnel_stats`
+- `get_data_truth_audit`
+- `list_data_truth_audit_details`
 - `list_bot_funnel_customers`
 - `list_nudge_rules`
 - `get_nudge_rule_candidates`
 - `get_nudge_history`
+
+If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visible:
+
+- `update_nudge_rule`
+- `upload_nudge_photo`
+- `send_nudge_test`
 
 Run low-risk read checks:
 
 ```text
 list_nudge_rules
 get_funnel_stats with groupBy=chain
+get_data_truth_audit
+list_data_truth_audit_details with bucket=meeting_without_charge and limit=5
 list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
 ```
@@ -105,7 +119,7 @@ Then inspect the audit log:
 tail -n 20 /var/log/admin-mcp/admin-mcp.jsonl
 ```
 
-The audit log should contain tool names, sanitized input, endpoint names, and success/failure status. It must not contain bearer tokens.
+The audit log should contain tool names, sanitized input, endpoint names, and success/failure status. It must not contain bearer tokens. For `upload_nudge_photo`, the audit log must redact `fileDataBase64`.
 
 ## 6. Docker Image
 
@@ -125,9 +139,9 @@ Before using a new build:
 
 ```bash
 corepack pnpm verify
-rg "POST|PUT|PATCH|DELETE|toggle|test-send|broadcast" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test" src test
 ```
 
-Expected: the grep should only hit the negative read-only guard test, not source endpoints.
+Expected: write tools are limited to the guarded nudge tool set. There must be no generic HTTP, SQL, shell, broadcast, or delete tool.
 
-Phase 10 intentionally exposes no write tools.
+Write tools must remain opt-in via `ADMIN_MCP_ENABLE_WRITE=true`.
