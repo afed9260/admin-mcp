@@ -15,6 +15,9 @@ import {
   funnelQuerySchema,
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
+  nudgePhotoUploadSchema,
+  nudgeRuleUpdateSchema,
+  nudgeTestSendSchema,
 } from "./schemas.js";
 import { createStatisticsTools } from "./statistics-tools.js";
 
@@ -32,10 +35,18 @@ export const readonlyToolNames = [
   "get_nudge_history",
 ] as const;
 
-type ToolName = (typeof readonlyToolNames)[number];
+export const writeToolNames = ["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"] as const;
+
+type ToolName = (typeof readonlyToolNames)[number] | (typeof writeToolNames)[number];
 
 const readOnlyAnnotations = {
   readOnlyHint: true,
+  destructiveHint: false,
+  openWorldHint: true,
+} as const;
+
+const writeAnnotations = {
+  readOnlyHint: false,
   destructiveHint: false,
   openWorldHint: true,
 } as const;
@@ -92,6 +103,17 @@ function failureMetadata(error: unknown): Record<string, unknown> {
   return { error: error instanceof Error ? error.message : String(error) };
 }
 
+function auditInput(toolName: ToolName, input: unknown): unknown {
+  if (toolName !== "upload_nudge_photo" || !input || typeof input !== "object") {
+    return input;
+  }
+
+  return {
+    ...(input as Record<string, unknown>),
+    fileDataBase64: "[BASE64_FILE_BYTES_REDACTED]",
+  };
+}
+
 async function runWithAudit(
   config: AdminMcpConfig,
   toolName: ToolName,
@@ -104,7 +126,7 @@ async function runWithAudit(
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
       toolName,
-      input,
+      input: auditInput(toolName, input),
       endpoint,
       status: "success",
       metadata: successMetadata(data),
@@ -114,7 +136,7 @@ async function runWithAudit(
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
       toolName,
-      input,
+      input: auditInput(toolName, input),
       endpoint,
       status: "failure",
       metadata: failureMetadata(error),
@@ -123,7 +145,7 @@ async function runWithAudit(
   }
 }
 
-export function registerReadOnlyTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
   const nudgeTools = createNudgeTools(client);
@@ -269,4 +291,44 @@ export function registerReadOnlyTools(server: McpServer, client: AdminApiClient,
     },
     (input) => runWithAudit(config, "get_nudge_history", "/nudge/history", input, nudgeTools.getNudgeHistory),
   );
+
+  if (!config.enableWriteTools) {
+    return;
+  }
+
+  server.registerTool(
+    "update_nudge_rule",
+    {
+      description:
+        "Update an existing nudge rule. Requires confirm=true and reason. Only provided fields are changed.",
+      inputSchema: inputSchema(nudgeRuleUpdateSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "update_nudge_rule", "/nudge/rules/{ruleId}", input, nudgeTools.updateNudgeRule),
+  );
+
+  server.registerTool(
+    "upload_nudge_photo",
+    {
+      description:
+        "Upload a nudge photo through the admin backend. Requires base64 file data, confirm=true, and reason.",
+      inputSchema: inputSchema(nudgePhotoUploadSchema),
+      annotations: writeAnnotations,
+    },
+    (input) => runWithAudit(config, "upload_nudge_photo", "/nudge/upload-photo", input, nudgeTools.uploadNudgePhoto),
+  );
+
+  server.registerTool(
+    "send_nudge_test",
+    {
+      description: "Send a test nudge message to a Telegram user. Requires confirm=true and reason.",
+      inputSchema: inputSchema(nudgeTestSendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "send_nudge_test", "/nudge/rules/{ruleId}/test-send", input, nudgeTools.sendNudgeTest),
+  );
 }
+
+export const registerReadOnlyTools = registerAdminTools;

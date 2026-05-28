@@ -7,6 +7,9 @@ import { createStatisticsTools } from "../src/tools/statistics-tools.js";
 function createClient() {
   return {
     get: vi.fn(async (path: string) => ({ path })),
+    post: vi.fn(async (path: string, body: unknown) => ({ body, path })),
+    postForm: vi.fn(async (path: string, body: FormData) => ({ body, path })),
+    put: vi.fn(async (path: string, body: unknown) => ({ body, path })),
   } as unknown as AdminApiClient & { get: ReturnType<typeof vi.fn> };
 }
 
@@ -95,5 +98,55 @@ describe("readonly admin tools", () => {
     await expect(tools.getNudgeHistory({ ruleId: "intro", limit: 5 })).resolves.toEqual({
       path: "/nudge/history?ruleId=intro&limit=5",
     });
+  });
+
+  it("requests nudge write endpoints only with explicit confirmation", async () => {
+    const client = createClient();
+    const tools = createNudgeTools(client);
+
+    await expect(
+      tools.updateNudgeRule({
+        confirm: true,
+        messageText: "Updated text",
+        reason: "manual MCP smoke test",
+        ruleId: "rule/1",
+      }),
+    ).resolves.toEqual({
+      body: { messageText: "Updated text" },
+      path: "/nudge/rules/rule%2F1",
+    });
+
+    await expect(
+      tools.sendNudgeTest({
+        confirm: true,
+        reason: "manual MCP smoke test",
+        ruleId: "rule/1",
+        telegramUserId: 123,
+      }),
+    ).resolves.toEqual({
+      body: { telegramUserId: 123 },
+      path: "/nudge/rules/rule%2F1/test-send",
+    });
+
+    await expect(
+      tools.uploadNudgePhoto({
+        confirm: true,
+        fileDataBase64: Buffer.from("photo").toString("base64"),
+        fileName: "photo.png",
+        mimeType: "image/png",
+        reason: "manual MCP smoke test",
+      }),
+    ).resolves.toMatchObject({
+      path: "/nudge/upload-photo",
+    });
+
+    await expect(
+      tools.updateNudgeRule({
+        confirm: false,
+        messageText: "Updated text",
+        reason: "manual MCP smoke test",
+        ruleId: "rule/1",
+      }),
+    ).rejects.toThrow();
   });
 });

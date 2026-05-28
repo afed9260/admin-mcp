@@ -20,12 +20,45 @@ export class AdminApiClient {
   }
 
   async get<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: "GET" });
+  }
+
+  async post<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, { jsonBody: body, method: "POST" });
+  }
+
+  async put<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, { jsonBody: body, method: "PUT" });
+  }
+
+  async postForm<T>(path: string, body: FormData): Promise<T> {
+    return this.request<T>(path, { body, method: "POST" });
+  }
+
+  private async request<T>(
+    path: string,
+    options: {
+      body?: BodyInit;
+      jsonBody?: unknown;
+      method: "GET" | "POST" | "PUT";
+    },
+  ): Promise<T> {
     const endpoint = this.normalizeEndpoint(path);
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+    };
+    const body = options.jsonBody === undefined ? options.body : JSON.stringify(options.jsonBody);
+
+    if (options.jsonBody !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
+
     const response = await this.fetchImpl(`${this.baseUrl}${endpoint}`, {
+      ...(body === undefined ? {} : { body }),
       headers: {
-        Authorization: `Bearer ${this.token}`,
+        ...headers,
       },
-      method: "GET",
+      method: options.method,
     });
 
     if (!response.ok) {
