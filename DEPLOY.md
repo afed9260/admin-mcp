@@ -113,6 +113,10 @@ If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visib
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
+- `execute_support_action_batch`
+
+Do not run `execute_support_action_batch` against a real customer ticket during smoke testing unless an internal
+test ticket and the exact approved action batch are provided. Use unit and registration tests as the default dry-run.
 
 Run low-risk read checks:
 
@@ -153,10 +157,11 @@ Before using a new build:
 
 ```bash
 corepack pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits|execute_support_action_batch" src test
 ```
 
 Expected: write tools are limited to guarded nudge tools and the guarded reactivation credit apply tool.
+The guarded support action batch tool is allowed only with `confirm=true`, `reason`, and the exact action-plan schema.
 There must be no generic HTTP, SQL, shell, broadcast, or delete tool.
 
 Write tools must remain opt-in via `ADMIN_MCP_ENABLE_WRITE=true`.

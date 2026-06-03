@@ -53,12 +53,14 @@ Optional write tools, only with `ADMIN_MCP_ENABLE_WRITE=true`:
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
+- `execute_support_action_batch`
 
 Every write tool requires `confirm: true` and a short `reason`. Write calls are audit-logged.
+Support action batches also require the exact pre-approved action plan, freshness fields, and idempotency key.
 
 ## Safety Checks
 
 ```bash
 pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits|execute_support_action_batch" src test
 ```
