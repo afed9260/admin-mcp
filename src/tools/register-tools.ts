@@ -19,6 +19,7 @@ import {
   nudgePhotoUploadSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
+  reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
   reactivationCampaignRunsQuerySchema,
@@ -48,6 +49,7 @@ export const readonlyToolNames = [
   "get_support_waiting_items",
   "get_support_investigation",
   "list_reactivation_campaign_runs",
+  "list_reactivation_campaign_audience",
 ] as const;
 
 export const safeAutomationToolNames = ["investigate_support_ticket", "dry_run_reactivation_dialog_credits"] as const;
@@ -412,6 +414,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/runs",
         input,
         growthCampaignTools.listReactivationCampaignRuns,
+      ),
+  );
+
+  server.registerTool(
+    "list_reactivation_campaign_audience",
+    {
+      description:
+        "List readonly canonical-owner audience for the 2026-06 reactivation campaign by business segment.",
+      inputSchema: inputSchema(reactivationCampaignAudienceQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_reactivation_campaign_audience",
+        "/growth-campaigns/reactivation-2026-06-wave-1/audience",
+        input,
+        growthCampaignTools.listReactivationCampaignAudience,
       ),
   );
 

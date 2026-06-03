@@ -232,22 +232,31 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
-      tools.dryRunReactivationDialogCredits({
-        telegramUserIds: [42, 43],
+      tools.listReactivationCampaignAudience({
+        limit: 50,
+        segment: "paid_avito_no_dialogs",
       }),
     ).resolves.toEqual({
-      body: { telegramUserIds: [42, 43] },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/audience?segment=paid_avito_no_dialogs&limit=50",
+    });
+
+    await expect(
+      tools.dryRunReactivationDialogCredits({
+        audienceSegment: "paid_avito_no_dialogs",
+      }),
+    ).resolves.toEqual({
+      body: { audienceSegment: "paid_avito_no_dialogs" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/dry-run",
     });
 
     await expect(
       tools.applyReactivationDialogCredits({
+        audienceSegment: "paid_no_dialogs_all",
         confirm: true,
         reason: "approved by campaign owner after dry-run",
-        telegramUserIds: [42, 43],
       }),
     ).resolves.toEqual({
-      body: { telegramUserIds: [42, 43] },
+      body: { audienceSegment: "paid_no_dialogs_all" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/apply",
     });
 

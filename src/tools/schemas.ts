@@ -270,18 +270,47 @@ export const reactivationCampaignRunsQuerySchema = z
   })
   .strict();
 
-export const reactivationCampaignDryRunSchema = z
+export const reactivationCampaignAudienceSegmentSchema = z.enum([
+  "paid_avito_no_dialogs",
+  "paid_no_avito_no_dialogs",
+  "paid_no_dialogs_all",
+]);
+
+export const reactivationCampaignAudienceQuerySchema = z
   .object({
-    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500),
+    segment: reactivationCampaignAudienceSegmentSchema.default("paid_avito_no_dialogs"),
+    limit: z.number().int().min(1).max(500).default(500),
   })
   .strict();
+
+const hasExactlyOneReactivationTarget = ({
+  audienceSegment,
+  telegramUserIds,
+}: {
+  audienceSegment?: string;
+  telegramUserIds?: number[];
+}) => Boolean(audienceSegment) !== Boolean(telegramUserIds?.length);
+
+export const reactivationCampaignDryRunSchema = z
+  .object({
+    audienceSegment: reactivationCampaignAudienceSegmentSchema.optional(),
+    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500).optional(),
+  })
+  .strict()
+  .refine(hasExactlyOneReactivationTarget, {
+    message: "Provide either audienceSegment or telegramUserIds",
+  });
 
 export const reactivationCampaignApplySchema = z
   .object({
     ...writeConfirmation,
-    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500),
+    audienceSegment: reactivationCampaignAudienceSegmentSchema.optional(),
+    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500).optional(),
   })
-  .strict();
+  .strict()
+  .refine(hasExactlyOneReactivationTarget, {
+    message: "Provide either audienceSegment or telegramUserIds",
+  });
 
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
@@ -300,5 +329,6 @@ export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;
 export type NudgePhotoUpload = z.infer<typeof nudgePhotoUploadSchema>;
 export type NudgeTestSend = z.infer<typeof nudgeTestSendSchema>;
 export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignRunsQuerySchema>;
+export type ReactivationCampaignAudienceQuery = z.infer<typeof reactivationCampaignAudienceQuerySchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;

@@ -1,6 +1,7 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
 import {
+  reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
   reactivationCampaignRunsQuerySchema,
@@ -18,6 +19,11 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async listReactivationCampaignRuns(input: unknown) {
       const query = reactivationCampaignRunsQuerySchema.parse(input);
       return client.get(`${reactivationCampaignBasePath}/runs?${toSearchParams(query)}`);
+    },
+
+    async listReactivationCampaignAudience(input: unknown) {
+      const query = reactivationCampaignAudienceQuerySchema.parse(input);
+      return client.get(`${reactivationCampaignBasePath}/audience?${toSearchParams(query)}`);
     },
 
     async dryRunReactivationDialogCredits(input: unknown) {

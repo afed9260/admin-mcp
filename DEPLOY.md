@@ -101,6 +101,7 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `list_reactivation_campaign_runs`
+- `list_reactivation_campaign_audience`
 
 These safe automation tools should also be visible without enabling guarded writes:
 
@@ -128,7 +129,8 @@ list_data_truth_audit_details with bucket=meeting_without_charge and limit=5
 list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
 list_reactivation_campaign_runs with limit=5
-dry_run_reactivation_dialog_credits with telegramUserIds=[808059872,200858348]
+list_reactivation_campaign_audience with segment=paid_avito_no_dialogs and limit=20
+dry_run_reactivation_dialog_credits with audienceSegment=paid_avito_no_dialogs
 ```
 
 Then inspect the audit log:
@@ -157,7 +159,7 @@ Before using a new build:
 
 ```bash
 corepack pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits|execute_support_action_batch" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits|execute_support_action_batch" src test
 ```
 
 Expected: write tools are limited to guarded nudge tools and the guarded reactivation credit apply tool.
