@@ -32,17 +32,43 @@ const supportStatus = z.enum([
   "closed",
 ]);
 const supportPriority = z.enum(["P1", "P2", "P3", "P4"]);
+const supportCategory = z.enum([
+  "avito_connection_issue",
+  "scenario_trigger_issue",
+  "billing_or_payment_issue",
+  "subscription_or_balance_issue",
+  "manual_account_transfer",
+  "how_to_question",
+  "product_bug",
+  "technical_bug",
+  "lead_or_dialog_quality_issue",
+  "meeting_or_success_issue",
+  "refund_or_complaint",
+  "do_not_contact",
+  "other",
+]);
+const supportWaitingInternalReason = z.enum(["developer", "billing", "product", "owner", "external_service"]);
+const supportResolutionType = z.enum([
+  "answered_question",
+  "fixed_account",
+  "billing_resolved",
+  "technical_issue_resolved",
+  "workaround_provided",
+  "not_reproducible",
+  "duplicate",
+  "customer_stopped_responding",
+]);
 const supportSourceChannel = z.enum(["telegram_support_bot", "max_support", "manual", "future_usedesk"]);
 const isoDateTime = z.string().datetime({ offset: true });
 const supportActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start_work") }).strict(),
   z.object({ type: z.literal("add_internal_note"), note: z.string().trim().min(1).max(5000) }).strict(),
   z.object({ type: z.literal("update_priority"), priority: supportPriority }).strict(),
-  z.object({ type: z.literal("update_category"), category: z.string().trim().min(1).max(100) }).strict(),
+  z.object({ type: z.literal("update_category"), category: supportCategory }).strict(),
   z
     .object({
       type: z.literal("set_waiting_internal"),
-      reason: z.string().trim().min(1).max(500),
+      reason: supportWaitingInternalReason,
       message: optionalText(2000),
     })
     .strict(),
@@ -51,7 +77,7 @@ const supportActionSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("resolve"),
-      finalResolutionType: z.string().trim().min(1).max(120),
+      finalResolutionType: supportResolutionType,
       resolutionSummary: z.string().trim().min(1).max(2000),
     })
     .strict(),
