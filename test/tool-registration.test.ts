@@ -68,6 +68,7 @@ describe("readonlyToolNames", () => {
       "get_support_waiting_items",
       "get_support_investigation",
       "list_reactivation_campaign_runs",
+      "list_reactivation_campaign_audience",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);

@@ -41,6 +41,7 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `list_reactivation_campaign_runs`
+- `list_reactivation_campaign_audience`
 
 Safe automation tools, available without `ADMIN_MCP_ENABLE_WRITE=true`:
 
@@ -55,10 +56,12 @@ Optional write tools, only with `ADMIN_MCP_ENABLE_WRITE=true`:
 - `apply_reactivation_dialog_credits`
 
 Every write tool requires `confirm: true` and a short `reason`. Write calls are audit-logged.
+For the reactivation campaign, prefer `audienceSegment` (`paid_avito_no_dialogs`,
+`paid_no_avito_no_dialogs`, or `paid_no_dialogs_all`) over manual Telegram user id lists.
 
 ## Safety Checks
 
 ```bash
 pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits" src test
 ```
