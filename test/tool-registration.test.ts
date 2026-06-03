@@ -67,6 +67,7 @@ describe("readonlyToolNames", () => {
       "get_support_summary",
       "get_support_waiting_items",
       "get_support_investigation",
+      "list_reactivation_campaign_runs",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
@@ -75,14 +76,19 @@ describe("readonlyToolNames", () => {
 
 describe("writeToolNames", () => {
   it("contains only the first guarded nudge write tools", () => {
-    expect(writeToolNames).toEqual(["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"]);
+    expect(writeToolNames).toEqual([
+      "update_nudge_rule",
+      "upload_nudge_photo",
+      "send_nudge_test",
+      "apply_reactivation_dialog_credits",
+    ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
   });
 });
 
 describe("safeAutomationToolNames", () => {
   it("contains support automations that are available without risky writes", () => {
-    expect(safeAutomationToolNames).toEqual(["investigate_support_ticket"]);
+    expect(safeAutomationToolNames).toEqual(["investigate_support_ticket", "dry_run_reactivation_dialog_credits"]);
   });
 });
 

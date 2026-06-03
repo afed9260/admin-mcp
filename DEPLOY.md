@@ -1,7 +1,7 @@
 # admin-mcp Deploy Guide
 
-This service is an MCP server for MalikBot admin data. By default it exposes read-only tools only.
-Guarded nudge write tools are exposed only when `ADMIN_MCP_ENABLE_WRITE=true`.
+This service is an MCP server for MalikBot admin data. By default it exposes read-only tools and safe
+automation tools only. Guarded write tools are exposed only when `ADMIN_MCP_ENABLE_WRITE=true`.
 
 Current transport: stdio.
 
@@ -95,12 +95,24 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `list_nudge_rules`
 - `get_nudge_rule_candidates`
 - `get_nudge_history`
+- `list_support_tickets`
+- `get_support_ticket`
+- `get_support_summary`
+- `get_support_waiting_items`
+- `get_support_investigation`
+- `list_reactivation_campaign_runs`
+
+These safe automation tools should also be visible without enabling guarded writes:
+
+- `investigate_support_ticket`
+- `dry_run_reactivation_dialog_credits`
 
 If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visible:
 
 - `update_nudge_rule`
 - `upload_nudge_photo`
 - `send_nudge_test`
+- `apply_reactivation_dialog_credits`
 
 Run low-risk read checks:
 
@@ -111,6 +123,8 @@ get_data_truth_audit
 list_data_truth_audit_details with bucket=meeting_without_charge and limit=5
 list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
+list_reactivation_campaign_runs with limit=5
+dry_run_reactivation_dialog_credits with telegramUserIds=[808059872,200858348]
 ```
 
 Then inspect the audit log:
@@ -139,9 +153,10 @@ Before using a new build:
 
 ```bash
 corepack pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|apply_reactivation_dialog_credits" src test
 ```
 
-Expected: write tools are limited to the guarded nudge tool set. There must be no generic HTTP, SQL, shell, broadcast, or delete tool.
+Expected: write tools are limited to guarded nudge tools and the guarded reactivation credit apply tool.
+There must be no generic HTTP, SQL, shell, broadcast, or delete tool.
 
 Write tools must remain opt-in via `ADMIN_MCP_ENABLE_WRITE=true`.

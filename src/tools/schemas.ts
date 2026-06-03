@@ -227,6 +227,25 @@ export const nudgeTestSendSchema = z
   })
   .strict();
 
+export const reactivationCampaignRunsQuerySchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(20),
+  })
+  .strict();
+
+export const reactivationCampaignDryRunSchema = z
+  .object({
+    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500),
+  })
+  .strict();
+
+export const reactivationCampaignApplySchema = z
+  .object({
+    ...writeConfirmation,
+    telegramUserIds: z.array(z.number().int().positive()).min(1).max(500),
+  })
+  .strict();
+
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
@@ -242,3 +261,6 @@ export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;
 export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;
 export type NudgePhotoUpload = z.infer<typeof nudgePhotoUploadSchema>;
 export type NudgeTestSend = z.infer<typeof nudgeTestSendSchema>;
+export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignRunsQuerySchema>;
+export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
+export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;

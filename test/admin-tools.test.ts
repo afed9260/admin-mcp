@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminApiClient } from "../src/backend/admin-api-client.js";
 import { createDialogTools } from "../src/tools/dialog-tools.js";
 import { createNudgeTools } from "../src/tools/nudge-tools.js";
+import { createGrowthCampaignTools } from "../src/tools/growth-campaign-tools.js";
 import { createStatisticsTools } from "../src/tools/statistics-tools.js";
 import { createSupportTools } from "../src/tools/support-tools.js";
 
@@ -196,5 +197,42 @@ describe("readonly admin tools", () => {
     await expect(tools.getSupportInvestigation({ ticketId: "ticket/1" })).resolves.toEqual({
       path: "/support-inbox/tickets/ticket%2F1/investigations/latest",
     });
+  });
+
+  it("requests reactivation campaign history, dry-run, and guarded apply endpoints", async () => {
+    const client = createClient();
+    const tools = createGrowthCampaignTools(client);
+
+    await expect(tools.listReactivationCampaignRuns({ limit: 5 })).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/runs?limit=5",
+    });
+
+    await expect(
+      tools.dryRunReactivationDialogCredits({
+        telegramUserIds: [42, 43],
+      }),
+    ).resolves.toEqual({
+      body: { telegramUserIds: [42, 43] },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/dry-run",
+    });
+
+    await expect(
+      tools.applyReactivationDialogCredits({
+        confirm: true,
+        reason: "approved by campaign owner after dry-run",
+        telegramUserIds: [42, 43],
+      }),
+    ).resolves.toEqual({
+      body: { telegramUserIds: [42, 43] },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/apply",
+    });
+
+    await expect(
+      tools.applyReactivationDialogCredits({
+        confirm: false,
+        reason: "approved by campaign owner after dry-run",
+        telegramUserIds: [42, 43],
+      }),
+    ).rejects.toThrow();
   });
 });

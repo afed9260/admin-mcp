@@ -4,6 +4,7 @@ import { appendAuditEvent } from "../audit/audit-log.js";
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { AdminMcpConfig } from "../config.js";
 import { createDialogTools } from "./dialog-tools.js";
+import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
 import {
   botFunnelCustomersQuerySchema,
@@ -18,6 +19,9 @@ import {
   nudgePhotoUploadSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
+  reactivationCampaignApplySchema,
+  reactivationCampaignDryRunSchema,
+  reactivationCampaignRunsQuerySchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -42,11 +46,17 @@ export const readonlyToolNames = [
   "get_support_summary",
   "get_support_waiting_items",
   "get_support_investigation",
+  "list_reactivation_campaign_runs",
 ] as const;
 
-export const safeAutomationToolNames = ["investigate_support_ticket"] as const;
+export const safeAutomationToolNames = ["investigate_support_ticket", "dry_run_reactivation_dialog_credits"] as const;
 
-export const writeToolNames = ["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"] as const;
+export const writeToolNames = [
+  "update_nudge_rule",
+  "upload_nudge_photo",
+  "send_nudge_test",
+  "apply_reactivation_dialog_credits",
+] as const;
 
 type ToolName =
   | (typeof readonlyToolNames)[number]
@@ -167,6 +177,7 @@ function registerTools(
 ): void {
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
+  const growthCampaignTools = createGrowthCampaignTools(client);
   const nudgeTools = createNudgeTools(client);
   const supportTools = createSupportTools(client);
 
@@ -385,6 +396,23 @@ function registerTools(
       ),
   );
 
+  server.registerTool(
+    "list_reactivation_campaign_runs",
+    {
+      description: "List readonly dry-run and apply history for the 2026-06 reactivation campaign.",
+      inputSchema: inputSchema(reactivationCampaignRunsQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_reactivation_campaign_runs",
+        "/growth-campaigns/reactivation-2026-06-wave-1/runs",
+        input,
+        growthCampaignTools.listReactivationCampaignRuns,
+      ),
+  );
+
   if (options.includeSafeAutomationTools) {
     server.registerTool(
       "investigate_support_ticket",
@@ -400,6 +428,24 @@ function registerTools(
           "/support-inbox/tickets/{ticketId}/investigations/run",
           input,
           supportTools.investigateSupportTicket,
+        ),
+    );
+
+    server.registerTool(
+      "dry_run_reactivation_dialog_credits",
+      {
+        description:
+          "Run a non-destructive dry-run for the 2026-06 reactivation dialog credit campaign. Persists an audit run but does not grant credits.",
+        inputSchema: inputSchema(reactivationCampaignDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_reactivation_dialog_credits",
+          "/growth-campaigns/reactivation-2026-06-wave-1/dry-run",
+          input,
+          growthCampaignTools.dryRunReactivationDialogCredits,
         ),
     );
   }
@@ -440,6 +486,24 @@ function registerTools(
     },
     (input) =>
       runWithAudit(config, "send_nudge_test", "/nudge/rules/{ruleId}/test-send", input, nudgeTools.sendNudgeTest),
+  );
+
+  server.registerTool(
+    "apply_reactivation_dialog_credits",
+    {
+      description:
+        "Grant 10 dialog-launch credits for the 2026-06 reactivation campaign. Requires confirm=true and reason.",
+      inputSchema: inputSchema(reactivationCampaignApplySchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "apply_reactivation_dialog_credits",
+        "/growth-campaigns/reactivation-2026-06-wave-1/apply",
+        input,
+        growthCampaignTools.applyReactivationDialogCredits,
+      ),
   );
 }
 
