@@ -191,6 +191,7 @@ describe("tool schemas", () => {
         { type: "update_category", category: "billing_or_payment_issue" },
         { type: "set_waiting_internal", reason: "billing", message: "Please check invoice 42" },
         { type: "send_reply", text: "Exact reply text" },
+        { type: "send_reply", textBase64: Buffer.from("Точный ответ клиенту", "utf8").toString("base64") },
         { type: "set_waiting_customer", message: "Waiting for customer confirmation" },
         { type: "resolve", finalResolutionType: "answered_question", resolutionSummary: "Customer received invoice" },
         { type: "close" },
@@ -198,7 +199,7 @@ describe("tool schemas", () => {
     });
 
     expect(parsed.ticketId).toBe("ticket/1");
-    expect(parsed.actions).toHaveLength(9);
+    expect(parsed.actions).toHaveLength(10);
   });
 
   it("rejects unsafe support action batches", () => {
@@ -216,6 +217,9 @@ describe("tool schemas", () => {
     expect(() => supportActionBatchSchema.parse({ ...base, confirm: true, actions: [] })).toThrow();
     expect(() =>
       supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "send_reply", text: "   " }] }),
+    ).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "send_reply", textBase64: "not base64" }] }),
     ).toThrow();
     expect(() =>
       supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "refund_customer" }] }),

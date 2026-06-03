@@ -60,7 +60,23 @@ const supportResolutionType = z.enum([
 ]);
 const supportSourceChannel = z.enum(["telegram_support_bot", "max_support", "manual", "future_usedesk"]);
 const isoDateTime = z.string().datetime({ offset: true });
-const supportActionSchema = z.discriminatedUnion("type", [
+const base64Text = z
+  .string()
+  .trim()
+  .min(1)
+  .max(7000)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+  .refine((value) => {
+    try {
+      const decoded = Buffer.from(value, "base64").toString("utf8");
+      const encoded = Buffer.from(decoded, "utf8").toString("base64");
+
+      return encoded.replace(/=+$/u, "") === value.replace(/=+$/u, "");
+    } catch {
+      return false;
+    }
+  }, "Invalid base64 text");
+const supportActionSchema = z.union([
   z.object({ type: z.literal("start_work") }).strict(),
   z.object({ type: z.literal("add_internal_note"), note: z.string().trim().min(1).max(5000) }).strict(),
   z.object({ type: z.literal("update_priority"), priority: supportPriority }).strict(),
@@ -73,6 +89,7 @@ const supportActionSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("send_reply"), text: z.string().trim().min(1).max(5000) }).strict(),
+  z.object({ type: z.literal("send_reply"), textBase64: base64Text }).strict(),
   z.object({ type: z.literal("set_waiting_customer"), message: optionalText(2000) }).strict(),
   z
     .object({
