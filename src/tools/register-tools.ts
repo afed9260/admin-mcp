@@ -23,6 +23,7 @@ import {
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
   reactivationCampaignRunsQuerySchema,
+  supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -58,6 +59,7 @@ export const writeToolNames = [
   "upload_nudge_photo",
   "send_nudge_test",
   "apply_reactivation_dialog_credits",
+  "execute_support_action_batch",
 ] as const;
 
 type ToolName =
@@ -523,6 +525,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/apply",
         input,
         growthCampaignTools.applyReactivationDialogCredits,
+      ),
+  );
+
+  server.registerTool(
+    "execute_support_action_batch",
+    {
+      description:
+        "Execute a guarded support action batch. Requires confirm=true and an exact pre-approved action plan.",
+      inputSchema: inputSchema(supportActionBatchSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "execute_support_action_batch",
+        "/support-inbox/tickets/{ticketId}/action-batches",
+        input,
+        supportTools.executeSupportActionBatch,
       ),
   );
 }

@@ -197,6 +197,30 @@ describe("readonly admin tools", () => {
     await expect(tools.getSupportInvestigation({ ticketId: "ticket/1" })).resolves.toEqual({
       path: "/support-inbox/tickets/ticket%2F1/investigations/latest",
     });
+
+    await expect(
+      tools.executeSupportActionBatch({
+        actionPlanId: "support-plan-1",
+        planHash: "sha256:abc",
+        expectedTicketUpdatedAt: "2026-06-03T11:09:36.831Z",
+        expiresAt: "2099-06-03T11:39:36.831Z",
+        confirm: true,
+        reason: "reply to customer",
+        ticketId: "ticket/1",
+        actions: [{ type: "send_reply", text: "Exact reply text" }],
+      }),
+    ).resolves.toEqual({
+      body: {
+        actionPlanId: "support-plan-1",
+        planHash: "sha256:abc",
+        expectedTicketUpdatedAt: "2026-06-03T11:09:36.831Z",
+        expiresAt: "2099-06-03T11:39:36.831Z",
+        confirm: true,
+        reason: "reply to customer",
+        actions: [{ type: "send_reply", text: "Exact reply text" }],
+      },
+      path: "/support-inbox/tickets/ticket%2F1/action-batches",
+    });
   });
 
   it("requests reactivation campaign history, dry-run, and guarded apply endpoints", async () => {

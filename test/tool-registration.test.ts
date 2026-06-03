@@ -82,6 +82,7 @@ describe("writeToolNames", () => {
       "upload_nudge_photo",
       "send_nudge_test",
       "apply_reactivation_dialog_credits",
+      "execute_support_action_batch",
     ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
   });
@@ -145,6 +146,24 @@ describe("createAdminMcpServer", () => {
         openWorldHint: true,
       });
     }
+  });
+
+  it("publishes guarded support action batch as a write tool only when write tools are enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+    expect(disabledToolNames).not.toContain("execute_support_action_batch");
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const tool = (await enabledClient.listTools()).tools.find(
+      (item) => item.name === "execute_support_action_batch",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
   });
 
   it("publishes safe automation annotations for support investigation", async () => {

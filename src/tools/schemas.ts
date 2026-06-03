@@ -33,6 +33,30 @@ const supportStatus = z.enum([
 ]);
 const supportPriority = z.enum(["P1", "P2", "P3", "P4"]);
 const supportSourceChannel = z.enum(["telegram_support_bot", "max_support", "manual", "future_usedesk"]);
+const isoDateTime = z.string().datetime({ offset: true });
+const supportActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start_work") }).strict(),
+  z.object({ type: z.literal("add_internal_note"), note: z.string().trim().min(1).max(5000) }).strict(),
+  z.object({ type: z.literal("update_priority"), priority: supportPriority }).strict(),
+  z.object({ type: z.literal("update_category"), category: z.string().trim().min(1).max(100) }).strict(),
+  z
+    .object({
+      type: z.literal("set_waiting_internal"),
+      reason: z.string().trim().min(1).max(500),
+      message: optionalText(2000),
+    })
+    .strict(),
+  z.object({ type: z.literal("send_reply"), text: z.string().trim().min(1).max(5000) }).strict(),
+  z.object({ type: z.literal("set_waiting_customer"), message: optionalText(2000) }).strict(),
+  z
+    .object({
+      type: z.literal("resolve"),
+      finalResolutionType: z.string().trim().min(1).max(120),
+      resolutionSummary: z.string().trim().min(1).max(2000),
+    })
+    .strict(),
+  z.object({ type: z.literal("close") }).strict(),
+]);
 const paidActivationSegment = z
   .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs"])
   .optional();
@@ -176,6 +200,19 @@ export const supportSummaryQuerySchema = z
   .strict()
   .refine(({ from, to }) => from <= to, { path: ["to"] });
 
+export const supportActionBatchSchema = z
+  .object({
+    ticketId: z.string().trim().min(1).max(120),
+    actionPlanId: z.string().trim().min(1).max(160),
+    planHash: z.string().trim().min(8).max(160),
+    expectedTicketUpdatedAt: isoDateTime,
+    expectedLastMessageId: z.string().trim().min(1).max(160).optional(),
+    expiresAt: isoDateTime,
+    ...writeConfirmation,
+    actions: z.array(supportActionSchema).min(1).max(20),
+  })
+  .strict();
+
 export const nudgeCandidatesQuerySchema = z
   .object({
     ruleId: z.string().trim().min(1).max(120),
@@ -285,6 +322,7 @@ export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
 export type SupportTicketsQuery = z.infer<typeof supportTicketsQuerySchema>;
 export type SupportTicketDetail = z.infer<typeof supportTicketDetailSchema>;
 export type SupportSummaryQuery = z.infer<typeof supportSummaryQuerySchema>;
+export type SupportActionBatch = z.infer<typeof supportActionBatchSchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
 export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;
 export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;

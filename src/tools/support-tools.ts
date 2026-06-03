@@ -1,6 +1,11 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
-import { supportSummaryQuerySchema, supportTicketDetailSchema, supportTicketsQuerySchema } from "./schemas.js";
+import {
+  supportActionBatchSchema,
+  supportSummaryQuerySchema,
+  supportTicketDetailSchema,
+  supportTicketsQuerySchema,
+} from "./schemas.js";
 
 export function createSupportTools(client: AdminApiClient) {
   return {
@@ -31,6 +36,11 @@ export function createSupportTools(client: AdminApiClient) {
     async getSupportInvestigation(input: unknown) {
       const query = supportTicketDetailSchema.parse(input);
       return client.get(`/support-inbox/tickets/${encodeURIComponent(query.ticketId)}/investigations/latest`);
+    },
+
+    async executeSupportActionBatch(input: unknown) {
+      const { ticketId, ...body } = supportActionBatchSchema.parse(input);
+      return client.post(`/support-inbox/tickets/${encodeURIComponent(ticketId)}/action-batches`, body);
     },
   };
 }

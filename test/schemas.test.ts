@@ -7,6 +7,7 @@ import {
   dateString,
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
+  supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -171,5 +172,53 @@ describe("tool schemas", () => {
     expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", to: "bad" })).toThrow();
     expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", sourceChannel: "email", to: "2026-06-03" }))
       .toThrow();
+  });
+
+  it("validates support action batches", () => {
+    const parsed = supportActionBatchSchema.parse({
+      actionPlanId: "support-plan-1",
+      planHash: "sha256:abc",
+      expectedTicketUpdatedAt: "2026-06-03T11:09:36.831Z",
+      expectedLastMessageId: "message-1",
+      expiresAt: "2099-06-03T11:39:36.831Z",
+      confirm: true,
+      reason: "reply to customer",
+      ticketId: "ticket/1",
+      actions: [
+        { type: "start_work" },
+        { type: "add_internal_note", note: "Investigated billing mismatch" },
+        { type: "update_priority", priority: "P2" },
+        { type: "update_category", category: "billing" },
+        { type: "set_waiting_internal", reason: "Need billing export", message: "Please check invoice 42" },
+        { type: "send_reply", text: "Exact reply text" },
+        { type: "set_waiting_customer", message: "Waiting for customer confirmation" },
+        { type: "resolve", finalResolutionType: "answered", resolutionSummary: "Customer received invoice" },
+        { type: "close" },
+      ],
+    });
+
+    expect(parsed.ticketId).toBe("ticket/1");
+    expect(parsed.actions).toHaveLength(9);
+  });
+
+  it("rejects unsafe support action batches", () => {
+    const base = {
+      actionPlanId: "support-plan-1",
+      planHash: "sha256:abc",
+      expectedTicketUpdatedAt: "2026-06-03T11:09:36.831Z",
+      expiresAt: "2099-06-03T11:39:36.831Z",
+      reason: "reply to customer",
+      ticketId: "ticket/1",
+    };
+
+    expect(() => supportActionBatchSchema.parse({ ...base, confirm: false, actions: [{ type: "start_work" }] }))
+      .toThrow();
+    expect(() => supportActionBatchSchema.parse({ ...base, confirm: true, actions: [] })).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "send_reply", text: "   " }] }),
+    ).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "refund_customer" }] }),
+    ).toThrow();
   });
 });
