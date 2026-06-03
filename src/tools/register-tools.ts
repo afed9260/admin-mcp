@@ -18,8 +18,12 @@ import {
   nudgePhotoUploadSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
+  supportSummaryQuerySchema,
+  supportTicketDetailSchema,
+  supportTicketsQuerySchema,
 } from "./schemas.js";
 import { createStatisticsTools } from "./statistics-tools.js";
+import { createSupportTools } from "./support-tools.js";
 
 export const readonlyToolNames = [
   "get_funnel_stats",
@@ -33,11 +37,21 @@ export const readonlyToolNames = [
   "list_nudge_rules",
   "get_nudge_rule_candidates",
   "get_nudge_history",
+  "list_support_tickets",
+  "get_support_ticket",
+  "get_support_summary",
+  "get_support_waiting_items",
+  "get_support_investigation",
 ] as const;
+
+export const safeAutomationToolNames = ["investigate_support_ticket"] as const;
 
 export const writeToolNames = ["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"] as const;
 
-type ToolName = (typeof readonlyToolNames)[number] | (typeof writeToolNames)[number];
+type ToolName =
+  | (typeof readonlyToolNames)[number]
+  | (typeof safeAutomationToolNames)[number]
+  | (typeof writeToolNames)[number];
 
 const readOnlyAnnotations = {
   readOnlyHint: true,
@@ -145,10 +159,16 @@ async function runWithAudit(
   }
 }
 
-export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+function registerTools(
+  server: McpServer,
+  client: AdminApiClient,
+  config: AdminMcpConfig,
+  options: { includeSafeAutomationTools: boolean; includeWriteTools: boolean },
+): void {
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
   const nudgeTools = createNudgeTools(client);
+  const supportTools = createSupportTools(client);
 
   server.registerTool(
     "get_funnel_stats",
@@ -292,7 +312,99 @@ export function registerAdminTools(server: McpServer, client: AdminApiClient, co
     (input) => runWithAudit(config, "get_nudge_history", "/nudge/history", input, nudgeTools.getNudgeHistory),
   );
 
-  if (!config.enableWriteTools) {
+  server.registerTool(
+    "list_support_tickets",
+    {
+      description: "List readonly support inbox tickets with filters and pagination.",
+      inputSchema: inputSchema(supportTicketsQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "list_support_tickets", "/support-inbox/tickets", input, supportTools.listSupportTickets),
+  );
+
+  server.registerTool(
+    "get_support_ticket",
+    {
+      description: "Get readonly support inbox ticket details.",
+      inputSchema: inputSchema(supportTicketDetailSchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_support_ticket",
+        "/support-inbox/tickets/{ticketId}",
+        input,
+        supportTools.getSupportTicket,
+      ),
+  );
+
+  server.registerTool(
+    "get_support_summary",
+    {
+      description: "Get readonly support inbox summary metrics.",
+      inputSchema: inputSchema(supportSummaryQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(config, "get_support_summary", "/support-inbox/summary", input, supportTools.getSupportSummary),
+  );
+
+  server.registerTool(
+    "get_support_waiting_items",
+    {
+      description: "Get readonly support tickets waiting on internal action.",
+      inputSchema: z.object({}).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_support_waiting_items",
+        "/support-inbox/tickets?status=waiting_internal&page=1&limit=50",
+        input,
+        () => supportTools.getSupportWaitingItems(),
+      ),
+  );
+
+  server.registerTool(
+    "get_support_investigation",
+    {
+      description: "Get readonly latest support ticket investigation.",
+      inputSchema: inputSchema(supportTicketDetailSchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_support_investigation",
+        "/support-inbox/tickets/{ticketId}/investigations/latest",
+        input,
+        supportTools.getSupportInvestigation,
+      ),
+  );
+
+  if (options.includeSafeAutomationTools) {
+    server.registerTool(
+      "investigate_support_ticket",
+      {
+        description: "Run a non-destructive support ticket investigation through the admin backend.",
+        inputSchema: inputSchema(supportTicketDetailSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "investigate_support_ticket",
+          "/support-inbox/tickets/{ticketId}/investigations/run",
+          input,
+          supportTools.investigateSupportTicket,
+        ),
+    );
+  }
+
+  if (!options.includeWriteTools) {
     return;
   }
 
@@ -331,4 +443,16 @@ export function registerAdminTools(server: McpServer, client: AdminApiClient, co
   );
 }
 
-export const registerReadOnlyTools = registerAdminTools;
+export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+  registerTools(server, client, config, {
+    includeSafeAutomationTools: true,
+    includeWriteTools: config.enableWriteTools,
+  });
+}
+
+export function registerReadOnlyTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+  registerTools(server, client, config, {
+    includeSafeAutomationTools: false,
+    includeWriteTools: false,
+  });
+}

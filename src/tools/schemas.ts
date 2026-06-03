@@ -11,7 +11,7 @@ const optionalText = (maxLength: number) =>
     .transform((value) => (value === "" ? undefined : value))
     .optional();
 
-const dateString = z
+export const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((value) => {
@@ -22,6 +22,17 @@ const dateString = z
   });
 const optionalDateString = dateString.optional();
 const boundedSearch = optionalText(200);
+const supportStatus = z.enum([
+  "new",
+  "needs_support_reply",
+  "in_progress",
+  "waiting_customer",
+  "waiting_internal",
+  "resolved",
+  "closed",
+]);
+const supportPriority = z.enum(["P1", "P2", "P3", "P4"]);
+const supportSourceChannel = z.enum(["telegram_support_bot", "max_support", "manual", "future_usedesk"]);
 const paidActivationSegment = z
   .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs"])
   .optional();
@@ -137,6 +148,34 @@ export const dialogDetailQuerySchema = z
   })
   .strict();
 
+export const supportTicketsQuerySchema = z
+  .object({
+    status: supportStatus.optional(),
+    priority: supportPriority.optional(),
+    category: optionalText(100),
+    sourceChannel: supportSourceChannel.optional(),
+    unresolvedOnly: z.boolean().optional(),
+    search: boundedSearch,
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+
+export const supportTicketDetailSchema = z
+  .object({
+    ticketId: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+export const supportSummaryQuerySchema = z
+  .object({
+    from: dateString,
+    to: dateString,
+    sourceChannel: supportSourceChannel.optional(),
+  })
+  .strict()
+  .refine(({ from, to }) => from <= to, { path: ["to"] });
+
 export const nudgeCandidatesQuerySchema = z
   .object({
     ruleId: z.string().trim().min(1).max(120),
@@ -195,6 +234,9 @@ export type BotFunnelCustomersQuery = z.infer<typeof botFunnelCustomersQuerySche
 export type DataTruthAuditDetailsQuery = z.infer<typeof dataTruthAuditDetailsQuerySchema>;
 export type DialogsQuery = z.infer<typeof dialogsQuerySchema>;
 export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
+export type SupportTicketsQuery = z.infer<typeof supportTicketsQuerySchema>;
+export type SupportTicketDetail = z.infer<typeof supportTicketDetailSchema>;
+export type SupportSummaryQuery = z.infer<typeof supportSummaryQuerySchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
 export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;
 export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;

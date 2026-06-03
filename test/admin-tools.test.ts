@@ -3,6 +3,7 @@ import { AdminApiClient } from "../src/backend/admin-api-client.js";
 import { createDialogTools } from "../src/tools/dialog-tools.js";
 import { createNudgeTools } from "../src/tools/nudge-tools.js";
 import { createStatisticsTools } from "../src/tools/statistics-tools.js";
+import { createSupportTools } from "../src/tools/support-tools.js";
 
 function createClient() {
   return {
@@ -148,5 +149,52 @@ describe("readonly admin tools", () => {
         ruleId: "rule/1",
       }),
     ).rejects.toThrow();
+  });
+
+  it("requests support inbox ticket, summary, and investigation endpoints", async () => {
+    const client = createClient();
+    const tools = createSupportTools(client);
+
+    await expect(
+      tools.listSupportTickets({
+        category: "billing",
+        priority: "P2",
+        search: "overdue",
+        sourceChannel: "max_support",
+        status: "needs_support_reply",
+        unresolvedOnly: true,
+        page: 2,
+        limit: 25,
+      }),
+    ).resolves.toEqual({
+      path: "/support-inbox/tickets?status=needs_support_reply&priority=P2&category=billing&sourceChannel=max_support&unresolvedOnly=true&search=overdue&page=2&limit=25",
+    });
+
+    await expect(tools.getSupportTicket({ ticketId: "ticket/1" })).resolves.toEqual({
+      path: "/support-inbox/tickets/ticket%2F1",
+    });
+
+    await expect(
+      tools.getSupportSummary({
+        from: "2026-06-01",
+        to: "2026-06-03",
+        sourceChannel: "telegram_support_bot",
+      }),
+    ).resolves.toEqual({
+      path: "/support-inbox/summary?from=2026-06-01&to=2026-06-03&sourceChannel=telegram_support_bot",
+    });
+
+    await expect(tools.getSupportWaitingItems()).resolves.toEqual({
+      path: "/support-inbox/tickets?status=waiting_internal&page=1&limit=50",
+    });
+
+    await expect(tools.investigateSupportTicket({ ticketId: "ticket/1" })).resolves.toEqual({
+      body: {},
+      path: "/support-inbox/tickets/ticket%2F1/investigations/run",
+    });
+
+    await expect(tools.getSupportInvestigation({ ticketId: "ticket/1" })).resolves.toEqual({
+      path: "/support-inbox/tickets/ticket%2F1/investigations/latest",
+    });
   });
 });

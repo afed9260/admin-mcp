@@ -4,8 +4,12 @@ import {
   costQuerySchema,
   dataTruthAuditDetailsQuerySchema,
   dialogsQuerySchema,
+  dateString,
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
+  supportSummaryQuerySchema,
+  supportTicketDetailSchema,
+  supportTicketsQuerySchema,
 } from "../src/tools/schemas.js";
 
 describe("tool schemas", () => {
@@ -109,5 +113,63 @@ describe("tool schemas", () => {
 
   it("rejects invalid dialog cost ranges", () => {
     expect(() => dialogsQuerySchema.parse({ costFrom: 20, costTo: 10 })).toThrow();
+  });
+
+  it("exports reusable date validation", () => {
+    expect(dateString.parse("2026-06-03")).toBe("2026-06-03");
+    expect(() => dateString.parse("2026-06-31")).toThrow();
+  });
+
+  it("defaults and validates support ticket filters", () => {
+    const parsed = supportTicketsQuerySchema.parse({
+      category: " billing ",
+      priority: "P1",
+      search: "max",
+      sourceChannel: "telegram_support_bot",
+      status: "waiting_internal",
+      unresolvedOnly: true,
+    });
+
+    expect(parsed).toEqual({
+      category: "billing",
+      limit: 50,
+      page: 1,
+      priority: "P1",
+      search: "max",
+      sourceChannel: "telegram_support_bot",
+      status: "waiting_internal",
+      unresolvedOnly: true,
+    });
+
+    expect(() => supportTicketsQuerySchema.parse({ status: "open" })).toThrow();
+    expect(() => supportTicketsQuerySchema.parse({ priority: "P0" })).toThrow();
+    expect(() => supportTicketsQuerySchema.parse({ sourceChannel: "email" })).toThrow();
+    expect(() => supportTicketsQuerySchema.parse({ category: "x".repeat(101) })).toThrow();
+    expect(() => supportTicketsQuerySchema.parse({ limit: 101 })).toThrow();
+  });
+
+  it("validates support ticket detail IDs", () => {
+    expect(supportTicketDetailSchema.parse({ ticketId: " ticket/1 " }).ticketId).toBe("ticket/1");
+    expect(() => supportTicketDetailSchema.parse({ ticketId: "" })).toThrow();
+    expect(() => supportTicketDetailSchema.parse({ ticketId: "x".repeat(121) })).toThrow();
+  });
+
+  it("validates support summary date range and source channel", () => {
+    expect(
+      supportSummaryQuerySchema.parse({
+        from: "2026-06-01",
+        sourceChannel: "max_support",
+        to: "2026-06-03",
+      }),
+    ).toEqual({
+      from: "2026-06-01",
+      sourceChannel: "max_support",
+      to: "2026-06-03",
+    });
+
+    expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-04", to: "2026-06-03" })).toThrow();
+    expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", to: "bad" })).toThrow();
+    expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", sourceChannel: "email", to: "2026-06-03" }))
+      .toThrow();
   });
 });

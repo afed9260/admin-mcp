@@ -8,7 +8,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminApiClient } from "../src/backend/admin-api-client.js";
 import { AdminMcpConfig } from "../src/config.js";
 import { createAdminMcpServer } from "../src/server.js";
-import { registerAdminTools, readonlyToolNames, writeToolNames } from "../src/tools/register-tools.js";
+import {
+  registerAdminTools,
+  registerReadOnlyTools,
+  readonlyToolNames,
+  safeAutomationToolNames,
+  writeToolNames,
+} from "../src/tools/register-tools.js";
 
 const config: AdminMcpConfig = {
   adminApiBaseUrl: "https://malikbot.ru/new-admin",
@@ -56,6 +62,11 @@ describe("readonlyToolNames", () => {
       "list_nudge_rules",
       "get_nudge_rule_candidates",
       "get_nudge_history",
+      "list_support_tickets",
+      "get_support_ticket",
+      "get_support_summary",
+      "get_support_waiting_items",
+      "get_support_investigation",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
@@ -65,33 +76,55 @@ describe("readonlyToolNames", () => {
 describe("writeToolNames", () => {
   it("contains only the first guarded nudge write tools", () => {
     expect(writeToolNames).toEqual(["update_nudge_rule", "upload_nudge_photo", "send_nudge_test"]);
+    expect(writeToolNames).not.toContain("investigate_support_ticket");
+  });
+});
+
+describe("safeAutomationToolNames", () => {
+  it("contains support automations that are available without risky writes", () => {
+    expect(safeAutomationToolNames).toEqual(["investigate_support_ticket"]);
   });
 });
 
 describe("createAdminMcpServer", () => {
-  it("registers readonly tools without throwing", async () => {
+  it("registers readonly and safe automation tools without throwing", async () => {
     expect(() => createAdminMcpServer(config)).not.toThrow();
 
     const client = await connect(createAdminMcpServer(config));
     const { tools } = await client.listTools();
 
-    expect(tools.map((tool) => tool.name)).toEqual(readonlyToolNames);
+    expect(tools.map((tool) => tool.name)).toEqual([...readonlyToolNames, ...safeAutomationToolNames]);
   });
 
-  it("registers nudge write tools only when explicitly enabled", async () => {
+  it("registers safe automation without enabling risky write tools", async () => {
     const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
-    await expect(disabledClient.listTools()).resolves.toMatchObject({
-      tools: expect.arrayContaining(readonlyToolNames.map((name) => expect.objectContaining({ name }))),
-    });
-    expect((await disabledClient.listTools()).tools.map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining([...writeToolNames]),
-    );
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+
+    expect(disabledToolNames).toEqual([...readonlyToolNames, ...safeAutomationToolNames]);
+    expect(disabledToolNames).not.toEqual(expect.arrayContaining([...writeToolNames]));
 
     const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
     expect((await enabledClient.listTools()).tools.map((tool) => tool.name)).toEqual([
       ...readonlyToolNames,
+      ...safeAutomationToolNames,
       ...writeToolNames,
     ]);
+  });
+
+  it("keeps legacy readonly registration readonly even when write tools are enabled", async () => {
+    const server = new McpServer({ name: "admin-mcp-readonly-test", version: "0.0.0" });
+    const client = {
+      get: vi.fn(async () => ({ ok: true })),
+      post: vi.fn(async () => ({ ok: true })),
+      postForm: vi.fn(async () => ({ ok: true })),
+      put: vi.fn(async () => ({ ok: true })),
+    } as unknown as AdminApiClient;
+
+    registerReadOnlyTools(server, client, { ...config, enableWriteTools: true });
+    const mcpClient = await connect(server);
+    const { tools } = await mcpClient.listTools();
+
+    expect(tools.map((tool) => tool.name)).toEqual(readonlyToolNames);
   });
 
   it("publishes guarded mutation annotations for write tools", async () => {
@@ -105,6 +138,19 @@ describe("createAdminMcpServer", () => {
         openWorldHint: true,
       });
     }
+  });
+
+  it("publishes safe automation annotations for support investigation", async () => {
+    const client = await connect(createAdminMcpServer(config));
+    const { tools } = await client.listTools();
+    const tool = tools.find((item) => item.name === "investigate_support_ticket");
+
+    expect(tool).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
   });
 
   it("redacts uploaded file bytes from mutation audit logs", async () => {
@@ -141,8 +187,9 @@ describe("createAdminMcpServer", () => {
     const client = await connect(createAdminMcpServer(config));
     const { tools } = await client.listTools();
 
-    expect(tools).toHaveLength(readonlyToolNames.length);
-    for (const tool of tools) {
+    const readonlyTools = tools.filter((tool) => readonlyToolNames.includes(tool.name as (typeof readonlyToolNames)[number]));
+    expect(readonlyTools).toHaveLength(readonlyToolNames.length);
+    for (const tool of readonlyTools) {
       expect(tool.annotations).toMatchObject({
         readOnlyHint: true,
         destructiveHint: false,
