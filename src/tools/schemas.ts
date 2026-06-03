@@ -338,6 +338,10 @@ export const reactivationCampaignApplySchema = z
     message: "Provide either audienceSegment or telegramUserIds",
   });
 
+export const reactivationCampaignNotificationDryRunSchema = reactivationCampaignDryRunSchema;
+
+export const reactivationCampaignNotificationSendSchema = reactivationCampaignApplySchema;
+
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
@@ -358,3 +362,5 @@ export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignR
 export type ReactivationCampaignAudienceQuery = z.infer<typeof reactivationCampaignAudienceQuerySchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
+export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;
+export type ReactivationCampaignNotificationSend = z.infer<typeof reactivationCampaignNotificationSendSchema>;

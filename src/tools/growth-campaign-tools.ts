@@ -4,6 +4,8 @@ import {
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
+  reactivationCampaignNotificationDryRunSchema,
+  reactivationCampaignNotificationSendSchema,
   reactivationCampaignRunsQuerySchema,
 } from "./schemas.js";
 
@@ -34,6 +36,16 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async applyReactivationDialogCredits(input: unknown) {
       const mutation = reactivationCampaignApplySchema.parse(input);
       return client.post(`${reactivationCampaignBasePath}/apply`, omitConfirmation(mutation));
+    },
+
+    async dryRunReactivationNotification(input: unknown) {
+      const body = reactivationCampaignNotificationDryRunSchema.parse(input);
+      return client.post(`${reactivationCampaignBasePath}/notification-dry-run`, body);
+    },
+
+    async sendReactivationNotification(input: unknown) {
+      const mutation = reactivationCampaignNotificationSendSchema.parse(input);
+      return client.post(`${reactivationCampaignBasePath}/notification-send`, omitConfirmation(mutation));
     },
   };
 }

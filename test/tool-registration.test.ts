@@ -82,6 +82,7 @@ describe("writeToolNames", () => {
       "upload_nudge_photo",
       "send_nudge_test",
       "apply_reactivation_dialog_credits",
+      "send_reactivation_notification",
       "execute_support_action_batch",
     ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
@@ -90,7 +91,11 @@ describe("writeToolNames", () => {
 
 describe("safeAutomationToolNames", () => {
   it("contains support automations that are available without risky writes", () => {
-    expect(safeAutomationToolNames).toEqual(["investigate_support_ticket", "dry_run_reactivation_dialog_credits"]);
+    expect(safeAutomationToolNames).toEqual([
+      "investigate_support_ticket",
+      "dry_run_reactivation_dialog_credits",
+      "dry_run_reactivation_notification",
+    ]);
   });
 });
 

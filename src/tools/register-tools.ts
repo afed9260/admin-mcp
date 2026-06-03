@@ -22,6 +22,8 @@ import {
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
+  reactivationCampaignNotificationDryRunSchema,
+  reactivationCampaignNotificationSendSchema,
   reactivationCampaignRunsQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
@@ -52,13 +54,18 @@ export const readonlyToolNames = [
   "list_reactivation_campaign_audience",
 ] as const;
 
-export const safeAutomationToolNames = ["investigate_support_ticket", "dry_run_reactivation_dialog_credits"] as const;
+export const safeAutomationToolNames = [
+  "investigate_support_ticket",
+  "dry_run_reactivation_dialog_credits",
+  "dry_run_reactivation_notification",
+] as const;
 
 export const writeToolNames = [
   "update_nudge_rule",
   "upload_nudge_photo",
   "send_nudge_test",
   "apply_reactivation_dialog_credits",
+  "send_reactivation_notification",
   "execute_support_action_batch",
 ] as const;
 
@@ -470,6 +477,24 @@ function registerTools(
           growthCampaignTools.dryRunReactivationDialogCredits,
         ),
     );
+
+    server.registerTool(
+      "dry_run_reactivation_notification",
+      {
+        description:
+          "Run a non-destructive dry-run for notifying users who received the 2026-06 reactivation bonus. Persists an audit run but does not send messages.",
+        inputSchema: inputSchema(reactivationCampaignNotificationDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_reactivation_notification",
+          "/growth-campaigns/reactivation-2026-06-wave-1/notification-dry-run",
+          input,
+          growthCampaignTools.dryRunReactivationNotification,
+        ),
+    );
   }
 
   if (!options.includeWriteTools) {
@@ -525,6 +550,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/apply",
         input,
         growthCampaignTools.applyReactivationDialogCredits,
+      ),
+  );
+
+  server.registerTool(
+    "send_reactivation_notification",
+    {
+      description:
+        "Send the 2026-06 reactivation bonus notification to users who actually received credits. Requires confirm=true and reason.",
+      inputSchema: inputSchema(reactivationCampaignNotificationSendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "send_reactivation_notification",
+        "/growth-campaigns/reactivation-2026-06-wave-1/notification-send",
+        input,
+        growthCampaignTools.sendReactivationNotification,
       ),
   );
 

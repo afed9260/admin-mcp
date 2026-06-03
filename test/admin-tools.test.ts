@@ -223,7 +223,7 @@ describe("readonly admin tools", () => {
     });
   });
 
-  it("requests reactivation campaign history, dry-run, and guarded apply endpoints", async () => {
+  it("requests reactivation campaign history, credit, and notification endpoints", async () => {
     const client = createClient();
     const tools = createGrowthCampaignTools(client);
 
@@ -261,9 +261,37 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.dryRunReactivationNotification({
+        audienceSegment: "paid_avito_no_dialogs",
+      }),
+    ).resolves.toEqual({
+      body: { audienceSegment: "paid_avito_no_dialogs" },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/notification-dry-run",
+    });
+
+    await expect(
+      tools.sendReactivationNotification({
+        audienceSegment: "paid_no_dialogs_all",
+        confirm: true,
+        reason: "approved by campaign owner after notification dry-run",
+      }),
+    ).resolves.toEqual({
+      body: { audienceSegment: "paid_no_dialogs_all" },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/notification-send",
+    });
+
+    await expect(
       tools.applyReactivationDialogCredits({
         confirm: false,
         reason: "approved by campaign owner after dry-run",
+        telegramUserIds: [42, 43],
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      tools.sendReactivationNotification({
+        confirm: false,
+        reason: "approved by campaign owner after notification dry-run",
         telegramUserIds: [42, 43],
       }),
     ).rejects.toThrow();
