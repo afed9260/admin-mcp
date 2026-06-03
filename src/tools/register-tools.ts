@@ -159,7 +159,12 @@ async function runWithAudit(
   }
 }
 
-export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+function registerTools(
+  server: McpServer,
+  client: AdminApiClient,
+  config: AdminMcpConfig,
+  options: { includeSafeAutomationTools: boolean; includeWriteTools: boolean },
+): void {
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
   const nudgeTools = createNudgeTools(client);
@@ -380,24 +385,26 @@ export function registerAdminTools(server: McpServer, client: AdminApiClient, co
       ),
   );
 
-  server.registerTool(
-    "investigate_support_ticket",
-    {
-      description: "Run a non-destructive support ticket investigation through the admin backend.",
-      inputSchema: inputSchema(supportTicketDetailSchema),
-      annotations: writeAnnotations,
-    },
-    (input) =>
-      runWithAudit(
-        config,
-        "investigate_support_ticket",
-        "/support-inbox/tickets/{ticketId}/investigations/run",
-        input,
-        supportTools.investigateSupportTicket,
-      ),
-  );
+  if (options.includeSafeAutomationTools) {
+    server.registerTool(
+      "investigate_support_ticket",
+      {
+        description: "Run a non-destructive support ticket investigation through the admin backend.",
+        inputSchema: inputSchema(supportTicketDetailSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "investigate_support_ticket",
+          "/support-inbox/tickets/{ticketId}/investigations/run",
+          input,
+          supportTools.investigateSupportTicket,
+        ),
+    );
+  }
 
-  if (!config.enableWriteTools) {
+  if (!options.includeWriteTools) {
     return;
   }
 
@@ -436,4 +443,16 @@ export function registerAdminTools(server: McpServer, client: AdminApiClient, co
   );
 }
 
-export const registerReadOnlyTools = registerAdminTools;
+export function registerAdminTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+  registerTools(server, client, config, {
+    includeSafeAutomationTools: true,
+    includeWriteTools: config.enableWriteTools,
+  });
+}
+
+export function registerReadOnlyTools(server: McpServer, client: AdminApiClient, config: AdminMcpConfig): void {
+  registerTools(server, client, config, {
+    includeSafeAutomationTools: false,
+    includeWriteTools: false,
+  });
+}

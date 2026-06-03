@@ -10,6 +10,7 @@ import { AdminMcpConfig } from "../src/config.js";
 import { createAdminMcpServer } from "../src/server.js";
 import {
   registerAdminTools,
+  registerReadOnlyTools,
   readonlyToolNames,
   safeAutomationToolNames,
   writeToolNames,
@@ -108,6 +109,22 @@ describe("createAdminMcpServer", () => {
       ...safeAutomationToolNames,
       ...writeToolNames,
     ]);
+  });
+
+  it("keeps legacy readonly registration readonly even when write tools are enabled", async () => {
+    const server = new McpServer({ name: "admin-mcp-readonly-test", version: "0.0.0" });
+    const client = {
+      get: vi.fn(async () => ({ ok: true })),
+      post: vi.fn(async () => ({ ok: true })),
+      postForm: vi.fn(async () => ({ ok: true })),
+      put: vi.fn(async () => ({ ok: true })),
+    } as unknown as AdminApiClient;
+
+    registerReadOnlyTools(server, client, { ...config, enableWriteTools: true });
+    const mcpClient = await connect(server);
+    const { tools } = await mcpClient.listTools();
+
+    expect(tools.map((tool) => tool.name)).toEqual(readonlyToolNames);
   });
 
   it("publishes guarded mutation annotations for write tools", async () => {
