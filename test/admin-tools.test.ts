@@ -264,44 +264,52 @@ describe("readonly admin tools", () => {
     ).resolves.toEqual({
       path: "/growth-campaigns/reactivation-2026-06-wave-1/audience?segment=paid_avito_no_dialogs&limit=50",
     });
+    await expect(
+      tools.listReactivationCampaignAudience({
+        limit: 50,
+        segment: "paid_inactive_with_dialogs",
+      }),
+    ).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/audience?segment=paid_inactive_with_dialogs&limit=50",
+    });
 
     await expect(
       tools.dryRunReactivationDialogCredits({
-        audienceSegment: "paid_avito_no_dialogs",
+        audienceSegment: "paid_inactive_with_dialogs",
       }),
     ).resolves.toEqual({
-      body: { audienceSegment: "paid_avito_no_dialogs" },
+      body: { audienceSegment: "paid_inactive_with_dialogs" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/dry-run",
     });
 
     await expect(
       tools.applyReactivationDialogCredits({
-        audienceSegment: "paid_no_dialogs_all",
+        audienceSegment: "paid_inactive_with_dialogs",
         confirm: true,
         reason: "approved by campaign owner after dry-run",
       }),
     ).resolves.toEqual({
-      body: { audienceSegment: "paid_no_dialogs_all" },
+      body: { audienceSegment: "paid_inactive_with_dialogs" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/apply",
     });
 
     await expect(
       tools.dryRunReactivationNotification({
-        audienceSegment: "paid_avito_no_dialogs",
+        audienceSegment: "paid_inactive_with_dialogs",
       }),
     ).resolves.toEqual({
-      body: { audienceSegment: "paid_avito_no_dialogs" },
+      body: { audienceSegment: "paid_inactive_with_dialogs" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/notification-dry-run",
     });
 
     await expect(
       tools.sendReactivationNotification({
-        audienceSegment: "paid_no_dialogs_all",
+        audienceSegment: "paid_inactive_with_dialogs",
         confirm: true,
         reason: "approved by campaign owner after notification dry-run",
       }),
     ).resolves.toEqual({
-      body: { audienceSegment: "paid_no_dialogs_all" },
+      body: { audienceSegment: "paid_inactive_with_dialogs" },
       path: "/growth-campaigns/reactivation-2026-06-wave-1/notification-send",
     });
 
