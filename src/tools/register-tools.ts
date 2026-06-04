@@ -3,6 +3,7 @@ import { z } from "zod";
 import { appendAuditEvent } from "../audit/audit-log.js";
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { AdminMcpConfig } from "../config.js";
+import { createCustomerOperationsTools } from "./customer-operations-tools.js";
 import { createDialogTools } from "./dialog-tools.js";
 import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
@@ -10,6 +11,9 @@ import {
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
+  customerDialogLaunchCreditApplySchema,
+  customerDialogLaunchCreditDryRunSchema,
+  customerOperationsProfileQuerySchema,
   dataTruthAuditDetailsQuerySchema,
   dialogDetailQuerySchema,
   dialogsQuerySchema,
@@ -51,12 +55,14 @@ export const readonlyToolNames = [
   "get_support_summary",
   "get_support_waiting_items",
   "get_support_investigation",
+  "get_customer_operations_profile",
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
 ] as const;
 
 export const safeAutomationToolNames = [
   "investigate_support_ticket",
+  "dry_run_customer_dialog_launch_credits",
   "dry_run_reactivation_dialog_credits",
   "dry_run_reactivation_notification",
 ] as const;
@@ -68,6 +74,7 @@ export const writeToolNames = [
   "apply_reactivation_dialog_credits",
   "send_reactivation_notification",
   "execute_support_action_batch",
+  "apply_customer_dialog_launch_credits",
 ] as const;
 
 type ToolName =
@@ -192,6 +199,7 @@ function registerTools(
   const growthCampaignTools = createGrowthCampaignTools(client);
   const nudgeTools = createNudgeTools(client);
   const supportTools = createSupportTools(client);
+  const customerOperationsTools = createCustomerOperationsTools(client);
 
   server.registerTool(
     "get_funnel_stats",
@@ -427,6 +435,24 @@ function registerTools(
   );
 
   server.registerTool(
+    "get_customer_operations_profile",
+    {
+      description:
+        "Get readonly Customer Operations profile for a customer by Telegram, canonical owner identity, or support-ticket origin.",
+      inputSchema: inputSchema(customerOperationsProfileQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_customer_operations_profile",
+        "/customer-operations/profile",
+        input,
+        customerOperationsTools.getCustomerOperationsProfile,
+      ),
+  );
+
+  server.registerTool(
     "list_reactivation_campaign_runs",
     {
       description: "List readonly dry-run and apply history for the 2026-06 reactivation campaign.",
@@ -476,6 +502,24 @@ function registerTools(
           "/support-inbox/tickets/{ticketId}/investigations/run",
           input,
           supportTools.investigateSupportTicket,
+        ),
+    );
+
+    server.registerTool(
+      "dry_run_customer_dialog_launch_credits",
+      {
+        description:
+          "Run a guarded dry-run for granting dialog-launch credits to one customer. Does not grant credits.",
+        inputSchema: inputSchema(customerDialogLaunchCreditDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_customer_dialog_launch_credits",
+          "/customer-operations/dialog-launch-credits/dry-run",
+          input,
+          customerOperationsTools.dryRunCustomerDialogLaunchCredits,
         ),
     );
 
@@ -605,6 +649,24 @@ function registerTools(
         "/support-inbox/tickets/{ticketId}/action-batches",
         input,
         supportTools.executeSupportActionBatch,
+      ),
+  );
+
+  server.registerTool(
+    "apply_customer_dialog_launch_credits",
+    {
+      description:
+        "Apply a guarded dialog-launch credit grant to one customer. Requires confirm=true, reason, and idempotencyKey.",
+      inputSchema: inputSchema(customerDialogLaunchCreditApplySchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "apply_customer_dialog_launch_credits",
+        "/customer-operations/dialog-launch-credits/apply",
+        input,
+        customerOperationsTools.applyCustomerDialogLaunchCredits,
       ),
   );
 }

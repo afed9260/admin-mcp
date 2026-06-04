@@ -23,11 +23,11 @@
 
 ## Tasks
 
-- [ ] Add failing registration tests for the three tool names and gating.
-- [ ] Add failing customer operations tool tests for profile, dry-run, apply, and `confirm` stripping.
-- [ ] Add Zod schemas for profile lookup and credit grant.
-- [ ] Implement `createCustomerOperationsTools`.
-- [ ] Register the tools with existing audit annotations.
-- [ ] Update README tool list.
-- [ ] Run `pnpm test`, `pnpm typecheck`, and `pnpm build`.
+- [x] Add failing registration tests for the three tool names and gating.
+- [x] Add failing customer operations tool tests for profile, dry-run, apply, and `confirm` stripping.
+- [x] Add Zod schemas for profile lookup and credit grant.
+- [x] Implement `createCustomerOperationsTools`.
+- [x] Register the tools with existing audit annotations.
+- [x] Update README tool list.
+- [x] Run tests, typecheck, and build.
 - [ ] Commit, push, create PR, merge, and verify the MCP server can expose the new tools after redeploy/reload.

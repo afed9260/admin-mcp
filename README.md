@@ -41,13 +41,16 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `get_support_summary`
 - `get_support_waiting_items`
 - `get_support_investigation`
+- `get_customer_operations_profile`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
 
 Safe automation tools, available without `ADMIN_MCP_ENABLE_WRITE=true`:
 
 - `investigate_support_ticket`
+- `dry_run_customer_dialog_launch_credits`
 - `dry_run_reactivation_dialog_credits`
+- `dry_run_reactivation_notification`
 
 Optional write tools, only with `ADMIN_MCP_ENABLE_WRITE=true`:
 
@@ -55,7 +58,9 @@ Optional write tools, only with `ADMIN_MCP_ENABLE_WRITE=true`:
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
+- `send_reactivation_notification`
 - `execute_support_action_batch`
+- `apply_customer_dialog_launch_credits`
 
 Every write tool requires `confirm: true` and a short `reason`. Write calls are audit-logged.
 Support action batches also require the exact pre-approved action plan, freshness fields, and idempotency key.
@@ -66,5 +71,5 @@ For the reactivation campaign, prefer `audienceSegment` (`paid_avito_no_dialogs`
 
 ```bash
 pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits|execute_support_action_batch" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits|execute_support_action_batch|customer_operations|customer_dialog" src test
 ```

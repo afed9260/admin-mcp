@@ -68,6 +68,7 @@ describe("readonlyToolNames", () => {
       "get_support_summary",
       "get_support_waiting_items",
       "get_support_investigation",
+      "get_customer_operations_profile",
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
     ]);
@@ -85,6 +86,7 @@ describe("writeToolNames", () => {
       "apply_reactivation_dialog_credits",
       "send_reactivation_notification",
       "execute_support_action_batch",
+      "apply_customer_dialog_launch_credits",
     ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
   });
@@ -94,6 +96,7 @@ describe("safeAutomationToolNames", () => {
   it("contains support automations that are available without risky writes", () => {
     expect(safeAutomationToolNames).toEqual([
       "investigate_support_ticket",
+      "dry_run_customer_dialog_launch_credits",
       "dry_run_reactivation_dialog_credits",
       "dry_run_reactivation_notification",
     ]);
@@ -162,6 +165,26 @@ describe("createAdminMcpServer", () => {
     const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
     const tool = (await enabledClient.listTools()).tools.find(
       (item) => item.name === "execute_support_action_batch",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+
+  it("publishes customer operations apply as a write tool only when write tools are enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+    expect(disabledToolNames).toContain("get_customer_operations_profile");
+    expect(disabledToolNames).toContain("dry_run_customer_dialog_launch_credits");
+    expect(disabledToolNames).not.toContain("apply_customer_dialog_launch_credits");
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const tool = (await enabledClient.listTools()).tools.find(
+      (item) => item.name === "apply_customer_dialog_launch_credits",
     );
 
     expect(tool).toBeDefined();
