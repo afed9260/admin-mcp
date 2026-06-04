@@ -184,6 +184,17 @@ describe("tool schemas", () => {
       confirm: true,
       reason: "reply to customer",
       ticketId: "ticket/1",
+      preflight: {
+        factsChecked: ["Customer asked about setup."],
+        category: "how_to_question",
+        priority: "P3",
+        nextStatus: "waiting_customer",
+        investigationNeeded: false,
+        taskNeeded: false,
+        unsupportedClaimRisk: false,
+        safeToSendCustomerReply: true,
+        summary: "Safe to send a grounded customer reply.",
+      },
       actions: [
         { type: "start_work" },
         { type: "add_internal_note", note: "Investigated billing mismatch" },
@@ -210,6 +221,17 @@ describe("tool schemas", () => {
       expiresAt: "2099-06-03T11:39:36.831Z",
       reason: "reply to customer",
       ticketId: "ticket/1",
+      preflight: {
+        factsChecked: ["Customer asked about setup."],
+        category: "how_to_question",
+        priority: "P3",
+        nextStatus: "waiting_customer",
+        investigationNeeded: false,
+        taskNeeded: false,
+        unsupportedClaimRisk: false,
+        safeToSendCustomerReply: true,
+        summary: "Safe to send a grounded customer reply.",
+      },
     };
 
     expect(() => supportActionBatchSchema.parse({ ...base, confirm: false, actions: [{ type: "start_work" }] }))
@@ -220,6 +242,26 @@ describe("tool schemas", () => {
     ).toThrow();
     expect(() =>
       supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "send_reply", textBase64: "not base64" }] }),
+    ).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({
+        ...base,
+        confirm: true,
+        preflight: {
+          ...base.preflight,
+          unsupportedClaimRisk: true,
+          safeToSendCustomerReply: false,
+        },
+        actions: [{ type: "send_reply", text: "Exact reply text" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({
+        ...base,
+        confirm: true,
+        actions: [{ type: "send_reply", text: "Exact reply text" }],
+        preflight: undefined,
+      }),
     ).toThrow();
     expect(() =>
       supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "refund_customer" }] }),
