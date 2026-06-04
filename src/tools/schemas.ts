@@ -247,6 +247,33 @@ export const supportTicketDetailSchema = z
   })
   .strict();
 
+export const customerOperationsProfileQuerySchema = z
+  .object({
+    workspaceId: optionalText(120),
+    sdelkaUserId: optionalText(120),
+    telegramUserId: z.number().int().positive().optional(),
+    originType: z.enum(["support_ticket"]).optional(),
+    originId: optionalText(120),
+  })
+  .strict();
+
+export const customerDialogLaunchCreditDryRunSchema = customerOperationsProfileQuerySchema
+  .extend({
+    expectedWorkspaceId: optionalText(120),
+    expectedSdelkaUserId: optionalText(120),
+    expectedTelegramUserId: z.number().int().positive().optional(),
+    slots: z.number().int().positive().max(10).default(10),
+    idempotencyKey: z.string().trim().min(8).max(200),
+    reason: z.string().trim().min(3).max(300),
+  })
+  .strict();
+
+export const customerDialogLaunchCreditApplySchema = customerDialogLaunchCreditDryRunSchema
+  .extend({
+    confirm: z.literal(true),
+  })
+  .strict();
+
 export const supportSummaryQuerySchema = z
   .object({
     from: dateString,
@@ -391,6 +418,9 @@ export type DialogsQuery = z.infer<typeof dialogsQuerySchema>;
 export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
 export type SupportTicketsQuery = z.infer<typeof supportTicketsQuerySchema>;
 export type SupportTicketDetail = z.infer<typeof supportTicketDetailSchema>;
+export type CustomerOperationsProfileQuery = z.infer<typeof customerOperationsProfileQuerySchema>;
+export type CustomerDialogLaunchCreditDryRun = z.infer<typeof customerDialogLaunchCreditDryRunSchema>;
+export type CustomerDialogLaunchCreditApply = z.infer<typeof customerDialogLaunchCreditApplySchema>;
 export type SupportSummaryQuery = z.infer<typeof supportSummaryQuerySchema>;
 export type SupportActionBatch = z.infer<typeof supportActionBatchSchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
