@@ -39,6 +39,9 @@ describe("readonly admin tools", () => {
     await expect(tools.getDataTruthAudit()).resolves.toEqual({
       path: "/statistics/data-truth-audit",
     });
+    await expect(tools.getIdentityMappingAudit()).resolves.toEqual({
+      path: "/statistics/identity-mapping-audit",
+    });
     await expect(
       tools.listDataTruthAuditDetails({
         bucket: "meeting_without_charge",
@@ -207,6 +210,17 @@ describe("readonly admin tools", () => {
         confirm: true,
         reason: "reply to customer",
         ticketId: "ticket/1",
+        preflight: {
+          factsChecked: ["Customer asked about setup."],
+          category: "how_to_question",
+          priority: "P3",
+          nextStatus: "waiting_customer",
+          investigationNeeded: false,
+          taskNeeded: false,
+          unsupportedClaimRisk: false,
+          safeToSendCustomerReply: true,
+          summary: "Safe to send a grounded customer reply.",
+        },
         actions: [{ type: "send_reply", text: "Exact reply text" }],
       }),
     ).resolves.toEqual({
@@ -217,6 +231,17 @@ describe("readonly admin tools", () => {
         expiresAt: "2099-06-03T11:39:36.831Z",
         confirm: true,
         reason: "reply to customer",
+        preflight: {
+          factsChecked: ["Customer asked about setup."],
+          category: "how_to_question",
+          priority: "P3",
+          nextStatus: "waiting_customer",
+          investigationNeeded: false,
+          taskNeeded: false,
+          unsupportedClaimRisk: false,
+          safeToSendCustomerReply: true,
+          summary: "Safe to send a grounded customer reply.",
+        },
         actions: [{ type: "send_reply", text: "Exact reply text" }],
       },
       path: "/support-inbox/tickets/ticket%2F1/action-batches",
