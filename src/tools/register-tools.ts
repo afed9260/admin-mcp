@@ -40,6 +40,7 @@ export const readonlyToolNames = [
   "get_dialog",
   "get_bot_funnel_stats",
   "get_data_truth_audit",
+  "get_identity_mapping_audit",
   "list_data_truth_audit_details",
   "list_bot_funnel_customers",
   "list_nudge_rules",
@@ -258,6 +259,24 @@ function registerTools(
         "/statistics/data-truth-audit",
         input,
         () => statisticsTools.getDataTruthAudit(),
+      ),
+  );
+
+  server.registerTool(
+    "get_identity_mapping_audit",
+    {
+      description:
+        "Get readonly canonical identity mapping audit for legacy Telegram users, channel accounts, and Sdelka owners.",
+      inputSchema: z.object({}).strict(),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_identity_mapping_audit",
+        "/statistics/identity-mapping-audit",
+        input,
+        () => statisticsTools.getIdentityMappingAudit(),
       ),
   );
 

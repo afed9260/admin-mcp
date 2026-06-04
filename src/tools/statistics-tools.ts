@@ -43,6 +43,10 @@ export function createStatisticsTools(client: AdminApiClient) {
       return client.get("/statistics/data-truth-audit");
     },
 
+    async getIdentityMappingAudit() {
+      return client.get("/statistics/identity-mapping-audit");
+    },
+
     async listDataTruthAuditDetails(input: unknown) {
       const query = dataTruthAuditDetailsQuerySchema.parse(input);
       return client.get(`/statistics/data-truth-audit/details?${toSearchParams(query)}`);
