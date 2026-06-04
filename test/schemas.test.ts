@@ -7,6 +7,8 @@ import {
   dateString,
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
+  reactivationCampaignAudienceQuerySchema,
+  reactivationCampaignDryRunSchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -55,6 +57,19 @@ describe("tool schemas", () => {
   it("rejects unknown bot funnel paid lifecycle filters", () => {
     expect(() => botFunnelCustomersQuerySchema.parse({ activationSegment: "paid_magic" })).toThrow();
     expect(() => botFunnelCustomersQuerySchema.parse({ paidLifecycleStage: "sleepy" })).toThrow();
+  });
+
+  it("accepts inactive paid reactivation campaign audience segment", () => {
+    const audience = reactivationCampaignAudienceQuerySchema.parse({
+      segment: "paid_inactive_with_dialogs",
+      limit: 50,
+    });
+    expect(audience.segment).toBe("paid_inactive_with_dialogs");
+
+    const dryRun = reactivationCampaignDryRunSchema.parse({
+      audienceSegment: "paid_inactive_with_dialogs",
+    });
+    expect(dryRun.audienceSegment).toBe("paid_inactive_with_dialogs");
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {

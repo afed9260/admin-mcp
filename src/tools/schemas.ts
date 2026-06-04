@@ -366,6 +366,7 @@ export const reactivationCampaignRunsQuerySchema = z
 export const reactivationCampaignAudienceSegmentSchema = z.enum([
   "paid_avito_no_dialogs",
   "paid_no_avito_no_dialogs",
+  "paid_inactive_with_dialogs",
   "paid_no_dialogs_all",
 ]);
 
