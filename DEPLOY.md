@@ -101,13 +101,16 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `get_support_summary`
 - `get_support_waiting_items`
 - `get_support_investigation`
+- `get_customer_operations_profile`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
 
 These safe automation tools should also be visible without enabling guarded writes:
 
 - `investigate_support_ticket`
+- `dry_run_customer_dialog_launch_credits`
 - `dry_run_reactivation_dialog_credits`
+- `dry_run_reactivation_notification`
 
 If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visible:
 
@@ -115,7 +118,9 @@ If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visib
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
+- `send_reactivation_notification`
 - `execute_support_action_batch`
+- `apply_customer_dialog_launch_credits`
 
 Do not run `execute_support_action_batch` against a real customer ticket during smoke testing unless an internal
 test ticket and the exact approved action batch are provided. Use unit and registration tests as the default dry-run.
@@ -132,6 +137,8 @@ list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
 list_reactivation_campaign_runs with limit=5
 list_reactivation_campaign_audience with segment=paid_avito_no_dialogs and limit=20
+get_customer_operations_profile with telegramUserId=437078503
+dry_run_customer_dialog_launch_credits with telegramUserId=437078503, expectedTelegramUserId=437078503, idempotencyKey=support-ticket-smoke-dialog-credit, reason=smoke test dry run, slots=10
 dry_run_reactivation_dialog_credits with audienceSegment=paid_avito_no_dialogs
 ```
 
@@ -161,10 +168,10 @@ Before using a new build:
 
 ```bash
 corepack pnpm verify
-rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits|execute_support_action_batch" src test
+rg "ADMIN_MCP_ENABLE_WRITE|confirm|reason|update_nudge_rule|upload_nudge_photo|send_nudge_test|list_reactivation_campaign_audience|apply_reactivation_dialog_credits|execute_support_action_batch|customer_operations|customer_dialog" src test
 ```
 
-Expected: write tools are limited to guarded nudge tools and the guarded reactivation credit apply tool.
+Expected: write tools are limited to guarded nudge tools, guarded reactivation tools, guarded support action batch, and guarded customer operations credit apply.
 The guarded support action batch tool is allowed only with `confirm=true`, `reason`, and the exact action-plan schema.
 There must be no generic HTTP, SQL, shell, broadcast, or delete tool.
 
