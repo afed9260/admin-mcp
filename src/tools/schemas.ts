@@ -100,6 +100,19 @@ const supportActionSchema = z.union([
     .strict(),
   z.object({ type: z.literal("close") }).strict(),
 ]);
+const supportActionPreflightSchema = z
+  .object({
+    factsChecked: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
+    category: supportCategory,
+    priority: supportPriority,
+    nextStatus: supportStatus,
+    investigationNeeded: z.boolean(),
+    taskNeeded: z.boolean(),
+    unsupportedClaimRisk: z.boolean(),
+    safeToSendCustomerReply: z.boolean(),
+    summary: z.string().trim().min(1).max(1000),
+  })
+  .strict();
 const paidActivationSegment = z
   .enum(["paid_no_avito_no_dialogs", "paid_avito_no_dialogs", "paid_with_dialogs"])
   .optional();
@@ -252,9 +265,19 @@ export const supportActionBatchSchema = z
     expectedLastMessageId: z.string().trim().min(1).max(160).optional(),
     expiresAt: isoDateTime,
     ...writeConfirmation,
+    preflight: supportActionPreflightSchema,
     actions: z.array(supportActionSchema).min(1).max(20),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ actions, preflight }) =>
+      preflight.safeToSendCustomerReply ||
+      !actions.some((action) => action.type === "send_reply" || action.type === "resolve" || action.type === "close"),
+    {
+      message: "Customer-facing support actions require safe preflight",
+      path: ["preflight", "safeToSendCustomerReply"],
+    },
+  );
 
 export const nudgeCandidatesQuerySchema = z
   .object({
