@@ -21,6 +21,7 @@ import {
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
   nudgePhotoUploadSchema,
+  nudgeRuleToggleSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
   referralManualReviewApproveSchema,
@@ -73,6 +74,7 @@ export const safeAutomationToolNames = [
 
 export const writeToolNames = [
   "update_nudge_rule",
+  "toggle_nudge_rule",
   "upload_nudge_photo",
   "send_nudge_test",
   "apply_reactivation_dialog_credits",
@@ -597,6 +599,17 @@ function registerTools(
     },
     (input) =>
       runWithAudit(config, "update_nudge_rule", "/nudge/rules/{ruleId}", input, nudgeTools.updateNudgeRule),
+  );
+
+  server.registerTool(
+    "toggle_nudge_rule",
+    {
+      description:
+        "Toggle a nudge rule only when its current enabled state matches expectedEnabled. Requires confirm=true and reason.",
+      inputSchema: inputSchema(nudgeRuleToggleSchema),
+      annotations: writeAnnotations,
+    },
+    (input) => runWithAudit(config, "toggle_nudge_rule", "/nudge/rules/{ruleId}/toggle", input, nudgeTools.toggleNudgeRule),
   );
 
   server.registerTool(

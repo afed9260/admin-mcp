@@ -133,6 +133,18 @@ describe("readonly admin tools", () => {
       path: "/nudge/rules/rule%2F1/test-send",
     });
 
+    client.get.mockResolvedValueOnce({ enabled: false, id: "rule/1" });
+    await expect(
+      tools.toggleNudgeRule({
+        confirm: true,
+        expectedEnabled: false,
+        reason: "manual MCP smoke test",
+        ruleId: "rule/1",
+      }),
+    ).resolves.toEqual({
+      path: "/nudge/rules/rule%2F1/toggle",
+    });
+
     await expect(
       tools.uploadNudgePhoto({
         confirm: true,
@@ -153,6 +165,21 @@ describe("readonly admin tools", () => {
         ruleId: "rule/1",
       }),
     ).rejects.toThrow();
+  });
+
+  it("refuses to toggle a nudge rule when the current enabled state differs from expectation", async () => {
+    const client = createClient();
+    const tools = createNudgeTools(client);
+    client.get.mockResolvedValueOnce({ enabled: true, id: "rule/1" });
+
+    await expect(
+      tools.toggleNudgeRule({
+        confirm: true,
+        expectedEnabled: false,
+        reason: "manual MCP smoke test",
+        ruleId: "rule/1",
+      }),
+    ).rejects.toThrow("Nudge rule enabled state mismatch");
   });
 
   it("requests support inbox ticket, summary, and investigation endpoints", async () => {

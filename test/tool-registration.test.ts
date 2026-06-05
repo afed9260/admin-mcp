@@ -82,6 +82,7 @@ describe("writeToolNames", () => {
   it("contains only the first guarded nudge write tools", () => {
     expect(writeToolNames).toEqual([
       "update_nudge_rule",
+      "toggle_nudge_rule",
       "upload_nudge_photo",
       "send_nudge_test",
       "apply_reactivation_dialog_credits",
