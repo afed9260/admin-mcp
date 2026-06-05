@@ -363,6 +363,14 @@ export const nudgeRuleUpdateSchema = z
     { message: "At least one rule field must be provided" },
   );
 
+export const nudgeRuleToggleSchema = z
+  .object({
+    ...writeConfirmation,
+    ruleId: z.string().trim().min(1).max(120),
+    expectedEnabled: z.boolean(),
+  })
+  .strict();
+
 export const nudgePhotoUploadSchema = z
   .object({
     ...writeConfirmation,
@@ -453,6 +461,7 @@ export type SupportActionBatch = z.infer<typeof supportActionBatchSchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
 export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;
 export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;
+export type NudgeRuleToggle = z.infer<typeof nudgeRuleToggleSchema>;
 export type NudgePhotoUpload = z.infer<typeof nudgePhotoUploadSchema>;
 export type NudgeTestSend = z.infer<typeof nudgeTestSendSchema>;
 export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignRunsQuerySchema>;

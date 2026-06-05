@@ -4,6 +4,7 @@ import {
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
   nudgePhotoUploadSchema,
+  nudgeRuleToggleSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
 } from "./schemas.js";
@@ -32,6 +33,21 @@ export function createNudgeTools(client: AdminApiClient) {
     async updateNudgeRule(input: unknown) {
       const mutation = nudgeRuleUpdateSchema.parse(input);
       return client.put(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}`, omitConfirmation(mutation));
+    },
+
+    async toggleNudgeRule(input: unknown) {
+      const mutation = nudgeRuleToggleSchema.parse(input);
+      const current = await client.get(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}`);
+      const currentEnabled =
+        typeof current === "object" && current !== null && "enabled" in current ? current.enabled : undefined;
+
+      if (currentEnabled !== mutation.expectedEnabled) {
+        throw new Error(
+          `Nudge rule enabled state mismatch: expected ${mutation.expectedEnabled}, got ${String(currentEnabled)}`,
+        );
+      }
+
+      return client.post(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}/toggle`, undefined);
     },
 
     async uploadNudgePhoto(input: unknown) {
