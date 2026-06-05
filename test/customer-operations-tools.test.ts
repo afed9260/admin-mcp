@@ -46,7 +46,7 @@ describe("createCustomerOperationsTools", () => {
     });
   });
 
-  it("applies a customer dialog launch credit grant without forwarding confirm", async () => {
+  it("applies a customer dialog launch credit grant with backend confirmation", async () => {
     const client = createClient();
     const tools = createCustomerOperationsTools(client);
 
@@ -65,6 +65,7 @@ describe("createCustomerOperationsTools", () => {
       slots: 10,
       idempotencyKey: "support-ticket-ticket-1-dialog-credit",
       reason: "Confirmed paid customer needs dialog launch credits",
+      confirm: true,
     });
   });
 
@@ -80,5 +81,61 @@ describe("createCustomerOperationsTools", () => {
     })).toThrow(/confirm/);
 
     expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("lists referral manual-review grants", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.listReferralManualReviewItems({ limit: 25 })).resolves.toEqual({ ok: true });
+
+    expect(client.get).toHaveBeenCalledWith("/customer-operations/referral/manual-review?limit=25");
+  });
+
+  it("approves referral manual-review grants with confirmation, reason, and idempotency key", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.approveReferralManualReviewGrant({
+      grantId: "grant-review",
+      confirm: true,
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral/manual-review/grant-review/approve", {
+      confirm: true,
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    });
+  });
+
+  it("rejects referral manual-review approval without confirmation before reaching the backend", () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    expect(() => tools.approveReferralManualReviewGrant({
+      grantId: "grant-review",
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    })).toThrow(/confirm/);
+
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("rejects referral manual-review grants with confirmation and reason", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.rejectReferralManualReviewGrant({
+      grantId: "grant-review",
+      confirm: true,
+      reason: "suspicious_self_referral",
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral/manual-review/grant-review/reject", {
+      confirm: true,
+      reason: "suspicious_self_referral",
+    });
   });
 });
