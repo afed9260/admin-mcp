@@ -4,6 +4,7 @@ import {
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
   nudgePhotoUploadSchema,
+  nudgeRuleProcessSchema,
   nudgeRuleToggleSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
@@ -48,6 +49,21 @@ export function createNudgeTools(client: AdminApiClient) {
       }
 
       return client.post(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}/toggle`, undefined);
+    },
+
+    async processNudgeRule(input: unknown) {
+      const mutation = nudgeRuleProcessSchema.parse(input);
+      const current = await client.get(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}`);
+      const currentEnabled =
+        typeof current === "object" && current !== null && "enabled" in current ? current.enabled : undefined;
+
+      if (currentEnabled !== mutation.expectedEnabled) {
+        throw new Error(
+          `Nudge rule enabled state mismatch: expected ${mutation.expectedEnabled}, got ${String(currentEnabled)}`,
+        );
+      }
+
+      return client.post(`/nudge/rules/${encodeURIComponent(mutation.ruleId)}/process`, undefined);
     },
 
     async uploadNudgePhoto(input: unknown) {

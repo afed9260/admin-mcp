@@ -371,6 +371,14 @@ export const nudgeRuleToggleSchema = z
   })
   .strict();
 
+export const nudgeRuleProcessSchema = z
+  .object({
+    ...writeConfirmation,
+    ruleId: z.string().trim().min(1).max(120),
+    expectedEnabled: z.boolean(),
+  })
+  .strict();
+
 export const nudgePhotoUploadSchema = z
   .object({
     ...writeConfirmation,
@@ -462,6 +470,7 @@ export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
 export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;
 export type NudgeRuleUpdate = z.infer<typeof nudgeRuleUpdateSchema>;
 export type NudgeRuleToggle = z.infer<typeof nudgeRuleToggleSchema>;
+export type NudgeRuleProcess = z.infer<typeof nudgeRuleProcessSchema>;
 export type NudgePhotoUpload = z.infer<typeof nudgePhotoUploadSchema>;
 export type NudgeTestSend = z.infer<typeof nudgeTestSendSchema>;
 export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignRunsQuerySchema>;
