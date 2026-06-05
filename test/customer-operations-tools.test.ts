@@ -89,7 +89,7 @@ describe("createCustomerOperationsTools", () => {
 
     await expect(tools.listReferralManualReviewItems({ limit: 25 })).resolves.toEqual({ ok: true });
 
-    expect(client.get).toHaveBeenCalledWith("/customer-operations/referral/manual-review?limit=25");
+    expect(client.get).toHaveBeenCalledWith("/customer-operations/referral-manual-review?limit=25");
   });
 
   it("approves referral manual-review grants with confirmation, reason, and idempotency key", async () => {
@@ -103,7 +103,7 @@ describe("createCustomerOperationsTools", () => {
       reason: "checked support ticket and payment ownership",
     })).resolves.toEqual({ ok: true });
 
-    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral/manual-review/grant-review/approve", {
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral-manual-review/grant-review/approve", {
       confirm: true,
       idempotencyKey: "ticket-1-referral-approve",
       reason: "checked support ticket and payment ownership",
@@ -133,7 +133,7 @@ describe("createCustomerOperationsTools", () => {
       reason: "suspicious_self_referral",
     })).resolves.toEqual({ ok: true });
 
-    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral/manual-review/grant-review/reject", {
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/referral-manual-review/grant-review/reject", {
       confirm: true,
       reason: "suspicious_self_referral",
     });

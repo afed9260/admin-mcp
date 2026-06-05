@@ -469,7 +469,7 @@ function registerTools(
       runWithAudit(
         config,
         "list_referral_manual_review_items",
-        "/customer-operations/referral/manual-review",
+        "/customer-operations/referral-manual-review",
         input,
         customerOperationsTools.listReferralManualReviewItems,
       ),
@@ -705,7 +705,7 @@ function registerTools(
       runWithAudit(
         config,
         "approve_referral_manual_review_grant",
-        "/customer-operations/referral/manual-review/{grantId}/approve",
+        "/customer-operations/referral-manual-review/{grantId}/approve",
         input,
         customerOperationsTools.approveReferralManualReviewGrant,
       ),
@@ -722,7 +722,7 @@ function registerTools(
       runWithAudit(
         config,
         "reject_referral_manual_review_grant",
-        "/customer-operations/referral/manual-review/{grantId}/reject",
+        "/customer-operations/referral-manual-review/{grantId}/reject",
         input,
         customerOperationsTools.rejectReferralManualReviewGrant,
       ),
