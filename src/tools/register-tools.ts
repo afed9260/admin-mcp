@@ -23,6 +23,9 @@ import {
   nudgePhotoUploadSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
+  referralManualReviewApproveSchema,
+  referralManualReviewListSchema,
+  referralManualReviewRejectSchema,
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
@@ -56,6 +59,7 @@ export const readonlyToolNames = [
   "get_support_waiting_items",
   "get_support_investigation",
   "get_customer_operations_profile",
+  "list_referral_manual_review_items",
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
 ] as const;
@@ -75,6 +79,8 @@ export const writeToolNames = [
   "send_reactivation_notification",
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
+  "approve_referral_manual_review_grant",
+  "reject_referral_manual_review_grant",
 ] as const;
 
 type ToolName =
@@ -453,6 +459,23 @@ function registerTools(
   );
 
   server.registerTool(
+    "list_referral_manual_review_items",
+    {
+      description: "List readonly referral bonus grants awaiting manual review.",
+      inputSchema: inputSchema(referralManualReviewListSchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_referral_manual_review_items",
+        "/customer-operations/referral/manual-review",
+        input,
+        customerOperationsTools.listReferralManualReviewItems,
+      ),
+  );
+
+  server.registerTool(
     "list_reactivation_campaign_runs",
     {
       description: "List readonly dry-run and apply history for the 2026-06 reactivation campaign.",
@@ -667,6 +690,41 @@ function registerTools(
         "/customer-operations/dialog-launch-credits/apply",
         input,
         customerOperationsTools.applyCustomerDialogLaunchCredits,
+      ),
+  );
+
+  server.registerTool(
+    "approve_referral_manual_review_grant",
+    {
+      description:
+        "Approve a referral manual-review grant and issue bonuses. Requires confirm=true, reason, and idempotencyKey.",
+      inputSchema: inputSchema(referralManualReviewApproveSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "approve_referral_manual_review_grant",
+        "/customer-operations/referral/manual-review/{grantId}/approve",
+        input,
+        customerOperationsTools.approveReferralManualReviewGrant,
+      ),
+  );
+
+  server.registerTool(
+    "reject_referral_manual_review_grant",
+    {
+      description: "Reject a referral manual-review grant. Requires confirm=true and reason.",
+      inputSchema: inputSchema(referralManualReviewRejectSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "reject_referral_manual_review_grant",
+        "/customer-operations/referral/manual-review/{grantId}/reject",
+        input,
+        customerOperationsTools.rejectReferralManualReviewGrant,
       ),
   );
 }

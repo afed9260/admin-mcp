@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   botFunnelCustomersQuerySchema,
   costQuerySchema,
+  referralManualReviewApproveSchema,
+  referralManualReviewListSchema,
+  referralManualReviewRejectSchema,
   dataTruthAuditDetailsQuerySchema,
   dialogsQuerySchema,
   dateString,
@@ -168,6 +171,51 @@ describe("tool schemas", () => {
     expect(supportTicketDetailSchema.parse({ ticketId: " ticket/1 " }).ticketId).toBe("ticket/1");
     expect(() => supportTicketDetailSchema.parse({ ticketId: "" })).toThrow();
     expect(() => supportTicketDetailSchema.parse({ ticketId: "x".repeat(121) })).toThrow();
+  });
+
+  it("validates referral manual-review operations", () => {
+    expect(referralManualReviewListSchema.parse({ limit: 25 })).toEqual({ limit: 25 });
+    expect(referralManualReviewListSchema.parse({})).toEqual({ limit: 50 });
+    expect(() => referralManualReviewListSchema.parse({ limit: 101 })).toThrow();
+
+    expect(referralManualReviewApproveSchema.parse({
+      grantId: " grant-review ",
+      confirm: true,
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    })).toEqual({
+      grantId: "grant-review",
+      confirm: true,
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    });
+
+    expect(referralManualReviewRejectSchema.parse({
+      grantId: "grant-review",
+      confirm: true,
+      reason: "suspicious_self_referral",
+    })).toEqual({
+      grantId: "grant-review",
+      confirm: true,
+      reason: "suspicious_self_referral",
+    });
+
+    expect(() => referralManualReviewApproveSchema.parse({
+      grantId: "grant-review",
+      idempotencyKey: "ticket-1-referral-approve",
+      reason: "checked support ticket and payment ownership",
+    })).toThrow();
+    expect(() => referralManualReviewApproveSchema.parse({
+      grantId: "grant-review",
+      confirm: true,
+      idempotencyKey: "short",
+      reason: "checked support ticket and payment ownership",
+    })).toThrow();
+    expect(() => referralManualReviewRejectSchema.parse({
+      grantId: "grant-review",
+      confirm: true,
+      reason: "no",
+    })).toThrow();
   });
 
   it("validates support summary date range and source channel", () => {

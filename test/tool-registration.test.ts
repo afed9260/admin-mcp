@@ -69,6 +69,7 @@ describe("readonlyToolNames", () => {
       "get_support_waiting_items",
       "get_support_investigation",
       "get_customer_operations_profile",
+      "list_referral_manual_review_items",
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
     ]);
@@ -87,6 +88,8 @@ describe("writeToolNames", () => {
       "send_reactivation_notification",
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
+      "approve_referral_manual_review_grant",
+      "reject_referral_manual_review_grant",
     ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
   });
@@ -180,7 +183,10 @@ describe("createAdminMcpServer", () => {
     const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
     expect(disabledToolNames).toContain("get_customer_operations_profile");
     expect(disabledToolNames).toContain("dry_run_customer_dialog_launch_credits");
+    expect(disabledToolNames).toContain("list_referral_manual_review_items");
     expect(disabledToolNames).not.toContain("apply_customer_dialog_launch_credits");
+    expect(disabledToolNames).not.toContain("approve_referral_manual_review_grant");
+    expect(disabledToolNames).not.toContain("reject_referral_manual_review_grant");
 
     const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
     const tool = (await enabledClient.listTools()).tools.find(
@@ -189,6 +195,32 @@ describe("createAdminMcpServer", () => {
 
     expect(tool).toBeDefined();
     expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+
+  it("publishes referral manual-review actions as write tools only when write tools are enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+    expect(disabledToolNames).toContain("list_referral_manual_review_items");
+    expect(disabledToolNames).not.toContain("approve_referral_manual_review_grant");
+    expect(disabledToolNames).not.toContain("reject_referral_manual_review_grant");
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const tools = (await enabledClient.listTools()).tools;
+    const approveTool = tools.find((item) => item.name === "approve_referral_manual_review_grant");
+    const rejectTool = tools.find((item) => item.name === "reject_referral_manual_review_grant");
+
+    expect(approveTool).toBeDefined();
+    expect(rejectTool).toBeDefined();
+    expect(approveTool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+    expect(rejectTool?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
