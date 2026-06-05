@@ -28,14 +28,14 @@ export function createCustomerOperationsTools(client: AdminApiClient) {
 
     listReferralManualReviewItems(input: unknown) {
       const query = referralManualReviewListSchema.parse(input);
-      return client.get(`/customer-operations/referral/manual-review?${toSearchParams(query)}`);
+      return client.get(`/customer-operations/referral-manual-review?${toSearchParams(query)}`);
     },
 
     approveReferralManualReviewGrant(input: unknown) {
       const mutation = referralManualReviewApproveSchema.parse(input);
       const { grantId, ...body } = mutation;
       return client.post(
-        `/customer-operations/referral/manual-review/${encodeURIComponent(grantId)}/approve`,
+        `/customer-operations/referral-manual-review/${encodeURIComponent(grantId)}/approve`,
         body,
       );
     },
@@ -44,7 +44,7 @@ export function createCustomerOperationsTools(client: AdminApiClient) {
       const mutation = referralManualReviewRejectSchema.parse(input);
       const { grantId, ...body } = mutation;
       return client.post(
-        `/customer-operations/referral/manual-review/${encodeURIComponent(grantId)}/reject`,
+        `/customer-operations/referral-manual-review/${encodeURIComponent(grantId)}/reject`,
         body,
       );
     },
