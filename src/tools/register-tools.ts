@@ -21,6 +21,7 @@ import {
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
   nudgePhotoUploadSchema,
+  nudgeRuleProcessSchema,
   nudgeRuleToggleSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
@@ -75,6 +76,7 @@ export const safeAutomationToolNames = [
 export const writeToolNames = [
   "update_nudge_rule",
   "toggle_nudge_rule",
+  "process_nudge_rule",
   "upload_nudge_photo",
   "send_nudge_test",
   "apply_reactivation_dialog_credits",
@@ -610,6 +612,17 @@ function registerTools(
       annotations: writeAnnotations,
     },
     (input) => runWithAudit(config, "toggle_nudge_rule", "/nudge/rules/{ruleId}/toggle", input, nudgeTools.toggleNudgeRule),
+  );
+
+  server.registerTool(
+    "process_nudge_rule",
+    {
+      description:
+        "Process an enabled nudge rule immediately through the admin backend. Requires confirm=true, reason, and expectedEnabled.",
+      inputSchema: inputSchema(nudgeRuleProcessSchema),
+      annotations: writeAnnotations,
+    },
+    (input) => runWithAudit(config, "process_nudge_rule", "/nudge/rules/{ruleId}/process", input, nudgeTools.processNudgeRule),
   );
 
   server.registerTool(
