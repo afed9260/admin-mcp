@@ -9,11 +9,6 @@ import {
   referralManualReviewRejectSchema,
 } from "./schemas.js";
 
-function omitConfirmation(input: Record<string, unknown>): Record<string, unknown> {
-  const { confirm, ...body } = input;
-  return body;
-}
-
 export function createCustomerOperationsTools(client: AdminApiClient) {
   return {
     getCustomerOperationsProfile(input: unknown) {
@@ -28,7 +23,7 @@ export function createCustomerOperationsTools(client: AdminApiClient) {
 
     applyCustomerDialogLaunchCredits(input: unknown) {
       const mutation = customerDialogLaunchCreditApplySchema.parse(input);
-      return client.post("/customer-operations/dialog-launch-credits/apply", omitConfirmation(mutation));
+      return client.post("/customer-operations/dialog-launch-credits/apply", mutation);
     },
 
     listReferralManualReviewItems(input: unknown) {

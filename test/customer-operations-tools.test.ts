@@ -46,7 +46,7 @@ describe("createCustomerOperationsTools", () => {
     });
   });
 
-  it("applies a customer dialog launch credit grant without forwarding confirm", async () => {
+  it("applies a customer dialog launch credit grant with backend confirmation", async () => {
     const client = createClient();
     const tools = createCustomerOperationsTools(client);
 
@@ -65,6 +65,7 @@ describe("createCustomerOperationsTools", () => {
       slots: 10,
       idempotencyKey: "support-ticket-ticket-1-dialog-credit",
       reason: "Confirmed paid customer needs dialog launch credits",
+      confirm: true,
     });
   });
 
