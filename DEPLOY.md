@@ -102,6 +102,7 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `get_customer_operations_profile`
+- `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
 
@@ -109,18 +110,24 @@ These safe automation tools should also be visible without enabling guarded writ
 
 - `investigate_support_ticket`
 - `dry_run_customer_dialog_launch_credits`
+- `dry_run_successful_dialog_debt_recovery`
 - `dry_run_reactivation_dialog_credits`
 - `dry_run_reactivation_notification`
 
 If `ADMIN_MCP_ENABLE_WRITE=true`, these guarded write tools should also be visible:
 
 - `update_nudge_rule`
+- `toggle_nudge_rule`
+- `process_nudge_rule`
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
 - `send_reactivation_notification`
 - `execute_support_action_batch`
 - `apply_customer_dialog_launch_credits`
+- `apply_successful_dialog_debt_recovery`
+- `approve_referral_manual_review_grant`
+- `reject_referral_manual_review_grant`
 
 Do not run `execute_support_action_batch` against a real customer ticket during smoke testing unless an internal
 test ticket and the exact approved action batch are provided. Use unit and registration tests as the default dry-run.

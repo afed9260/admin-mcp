@@ -7,6 +7,8 @@ import {
   referralManualReviewApproveSchema,
   referralManualReviewListSchema,
   referralManualReviewRejectSchema,
+  successfulDialogDebtRecoveryApplySchema,
+  successfulDialogDebtRecoveryDryRunSchema,
 } from "./schemas.js";
 
 export function createCustomerOperationsTools(client: AdminApiClient) {
@@ -24,6 +26,16 @@ export function createCustomerOperationsTools(client: AdminApiClient) {
     applyCustomerDialogLaunchCredits(input: unknown) {
       const mutation = customerDialogLaunchCreditApplySchema.parse(input);
       return client.post("/customer-operations/dialog-launch-credits/apply", mutation);
+    },
+
+    dryRunSuccessfulDialogDebtRecovery(input: unknown) {
+      const body = successfulDialogDebtRecoveryDryRunSchema.parse(input);
+      return client.post("/customer-operations/successful-dialog-debt-recovery/dry-run", body);
+    },
+
+    applySuccessfulDialogDebtRecovery(input: unknown) {
+      const mutation = successfulDialogDebtRecoveryApplySchema.parse(input);
+      return client.post("/customer-operations/successful-dialog-debt-recovery/apply", mutation);
     },
 
     listReferralManualReviewItems(input: unknown) {

@@ -90,6 +90,7 @@ describe("writeToolNames", () => {
       "send_reactivation_notification",
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
+      "apply_successful_dialog_debt_recovery",
       "approve_referral_manual_review_grant",
       "reject_referral_manual_review_grant",
     ]);
@@ -102,6 +103,7 @@ describe("safeAutomationToolNames", () => {
     expect(safeAutomationToolNames).toEqual([
       "investigate_support_ticket",
       "dry_run_customer_dialog_launch_credits",
+      "dry_run_successful_dialog_debt_recovery",
       "dry_run_reactivation_dialog_credits",
       "dry_run_reactivation_notification",
     ]);
@@ -185,14 +187,35 @@ describe("createAdminMcpServer", () => {
     const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
     expect(disabledToolNames).toContain("get_customer_operations_profile");
     expect(disabledToolNames).toContain("dry_run_customer_dialog_launch_credits");
+    expect(disabledToolNames).toContain("dry_run_successful_dialog_debt_recovery");
     expect(disabledToolNames).toContain("list_referral_manual_review_items");
     expect(disabledToolNames).not.toContain("apply_customer_dialog_launch_credits");
+    expect(disabledToolNames).not.toContain("apply_successful_dialog_debt_recovery");
     expect(disabledToolNames).not.toContain("approve_referral_manual_review_grant");
     expect(disabledToolNames).not.toContain("reject_referral_manual_review_grant");
 
     const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
     const tool = (await enabledClient.listTools()).tools.find(
       (item) => item.name === "apply_customer_dialog_launch_credits",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+
+  it("publishes successful-dialog debt recovery apply as a write tool only when write tools are enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+    expect(disabledToolNames).toContain("dry_run_successful_dialog_debt_recovery");
+    expect(disabledToolNames).not.toContain("apply_successful_dialog_debt_recovery");
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const tool = (await enabledClient.listTools()).tools.find(
+      (item) => item.name === "apply_successful_dialog_debt_recovery",
     );
 
     expect(tool).toBeDefined();
