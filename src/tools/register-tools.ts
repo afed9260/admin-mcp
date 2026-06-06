@@ -38,6 +38,8 @@ import {
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
+  successfulDialogDebtRecoveryApplySchema,
+  successfulDialogDebtRecoveryDryRunSchema,
 } from "./schemas.js";
 import { createStatisticsTools } from "./statistics-tools.js";
 import { createSupportTools } from "./support-tools.js";
@@ -69,6 +71,7 @@ export const readonlyToolNames = [
 export const safeAutomationToolNames = [
   "investigate_support_ticket",
   "dry_run_customer_dialog_launch_credits",
+  "dry_run_successful_dialog_debt_recovery",
   "dry_run_reactivation_dialog_credits",
   "dry_run_reactivation_notification",
 ] as const;
@@ -83,6 +86,7 @@ export const writeToolNames = [
   "send_reactivation_notification",
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
+  "apply_successful_dialog_debt_recovery",
   "approve_referral_manual_review_grant",
   "reject_referral_manual_review_grant",
 ] as const;
@@ -551,6 +555,24 @@ function registerTools(
     );
 
     server.registerTool(
+      "dry_run_successful_dialog_debt_recovery",
+      {
+        description:
+          "Run a guarded dry-run for recovering successful-dialog debt from a package transaction. Does not apply debits.",
+        inputSchema: inputSchema(successfulDialogDebtRecoveryDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_successful_dialog_debt_recovery",
+          "/customer-operations/successful-dialog-debt-recovery/dry-run",
+          input,
+          customerOperationsTools.dryRunSuccessfulDialogDebtRecovery,
+        ),
+    );
+
+    server.registerTool(
       "dry_run_reactivation_dialog_credits",
       {
         description:
@@ -716,6 +738,24 @@ function registerTools(
         "/customer-operations/dialog-launch-credits/apply",
         input,
         customerOperationsTools.applyCustomerDialogLaunchCredits,
+      ),
+  );
+
+  server.registerTool(
+    "apply_successful_dialog_debt_recovery",
+    {
+      description:
+        "Apply guarded successful-dialog debt recovery from a package transaction. Requires confirm=true, reason, idempotencyKey, and expected dry-run totals.",
+      inputSchema: inputSchema(successfulDialogDebtRecoveryApplySchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "apply_successful_dialog_debt_recovery",
+        "/customer-operations/successful-dialog-debt-recovery/apply",
+        input,
+        customerOperationsTools.applySuccessfulDialogDebtRecovery,
       ),
   );
 

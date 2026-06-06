@@ -69,6 +69,61 @@ describe("createCustomerOperationsTools", () => {
     });
   });
 
+  it("dry-runs successful-dialog debt recovery for a package transaction", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.dryRunSuccessfulDialogDebtRecovery({
+      transactionId: "transaction-debt",
+      manualReviewChatIds: ["chat-review"],
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/successful-dialog-debt-recovery/dry-run", {
+      transactionId: "transaction-debt",
+      manualReviewChatIds: ["chat-review"],
+    });
+  });
+
+  it("applies successful-dialog debt recovery with confirmation and expected dry-run totals", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.applySuccessfulDialogDebtRecovery({
+      transactionId: "transaction-debt",
+      manualReviewChatIds: ["chat-review"],
+      expectedRecoverableCount: 2,
+      expectedRecoverableAmountRub: 800,
+      idempotencyKey: "debt-recovery-transaction-debt",
+      reason: "operator reviewed recoverable debt rows",
+      confirm: true,
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith("/customer-operations/successful-dialog-debt-recovery/apply", {
+      transactionId: "transaction-debt",
+      manualReviewChatIds: ["chat-review"],
+      expectedRecoverableCount: 2,
+      expectedRecoverableAmountRub: 800,
+      idempotencyKey: "debt-recovery-transaction-debt",
+      reason: "operator reviewed recoverable debt rows",
+      confirm: true,
+    });
+  });
+
+  it("rejects successful-dialog debt recovery apply without confirmation before reaching the backend", () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    expect(() => tools.applySuccessfulDialogDebtRecovery({
+      transactionId: "transaction-debt",
+      expectedRecoverableCount: 2,
+      expectedRecoverableAmountRub: 800,
+      idempotencyKey: "debt-recovery-transaction-debt",
+      reason: "operator reviewed recoverable debt rows",
+    })).toThrow(/confirm/);
+
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
   it("rejects apply without confirmation before reaching the backend", () => {
     const client = createClient();
     const tools = createCustomerOperationsTools(client);

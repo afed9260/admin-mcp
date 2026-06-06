@@ -42,6 +42,7 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `get_customer_operations_profile`
+- `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
 
@@ -49,18 +50,24 @@ Safe automation tools, available without `ADMIN_MCP_ENABLE_WRITE=true`:
 
 - `investigate_support_ticket`
 - `dry_run_customer_dialog_launch_credits`
+- `dry_run_successful_dialog_debt_recovery`
 - `dry_run_reactivation_dialog_credits`
 - `dry_run_reactivation_notification`
 
 Optional write tools, only with `ADMIN_MCP_ENABLE_WRITE=true`:
 
 - `update_nudge_rule`
+- `toggle_nudge_rule`
+- `process_nudge_rule`
 - `upload_nudge_photo`
 - `send_nudge_test`
 - `apply_reactivation_dialog_credits`
 - `send_reactivation_notification`
 - `execute_support_action_batch`
 - `apply_customer_dialog_launch_credits`
+- `apply_successful_dialog_debt_recovery`
+- `approve_referral_manual_review_grant`
+- `reject_referral_manual_review_grant`
 
 Every write tool requires `confirm: true` and a short `reason`. Write calls are audit-logged.
 Support action batches also require the exact pre-approved action plan, freshness fields, and idempotency key.
