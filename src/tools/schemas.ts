@@ -442,6 +442,13 @@ export const reactivationSendEligibilityQuerySchema = reactivationCampaignAudien
   })
   .strict();
 
+export const reactivationWave2ReadinessQuerySchema = reactivationCampaignAudienceQuerySchema
+  .extend({
+    nextAction: z.enum(["start_first_dialog", "connect_avito", "sell_benefit"]).optional(),
+    semanticTouchKey: z.string().trim().min(1).max(160).optional(),
+  })
+  .strict();
+
 const hasExactlyOneReactivationTarget = ({
   audienceSegment,
   telegramUserIds,
@@ -505,6 +512,7 @@ export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignR
 export type ReactivationCampaignAudienceQuery = z.infer<typeof reactivationCampaignAudienceQuerySchema>;
 export type ReactivationCampaignStateQuery = z.infer<typeof reactivationCampaignStateQuerySchema>;
 export type ReactivationSendEligibilityQuery = z.infer<typeof reactivationSendEligibilityQuerySchema>;
+export type ReactivationWave2ReadinessQuery = z.infer<typeof reactivationWave2ReadinessQuerySchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
 export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;

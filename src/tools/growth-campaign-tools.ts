@@ -9,6 +9,7 @@ import {
   reactivationCampaignRunsQuerySchema,
   reactivationCampaignStateQuerySchema,
   reactivationSendEligibilityQuerySchema,
+  reactivationWave2ReadinessQuerySchema,
 } from "./schemas.js";
 
 const reactivationCampaignBasePath = "/growth-campaigns/reactivation-2026-06-wave-1";
@@ -38,6 +39,11 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async getReactivationDeliveryEligibility(input: unknown) {
       const query = reactivationSendEligibilityQuerySchema.parse(input);
       return client.get(`${reactivationCampaignBasePath}/send-eligibility?${toSearchParams(query)}`);
+    },
+
+    async getReactivationWave2Readiness(input: unknown) {
+      const query = reactivationWave2ReadinessQuerySchema.parse(input);
+      return client.get(`${reactivationCampaignBasePath}/wave-2-readiness?${toSearchParams(query)}`);
     },
 
     async dryRunReactivationDialogCredits(input: unknown) {

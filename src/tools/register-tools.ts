@@ -36,6 +36,7 @@ import {
   reactivationCampaignRunsQuerySchema,
   reactivationCampaignStateQuerySchema,
   reactivationSendEligibilityQuerySchema,
+  reactivationWave2ReadinessQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -70,6 +71,7 @@ export const readonlyToolNames = [
   "list_reactivation_campaign_audience",
   "get_reactivation_campaign_state",
   "get_reactivation_delivery_eligibility",
+  "get_reactivation_wave_2_readiness",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -555,6 +557,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/send-eligibility",
         input,
         growthCampaignTools.getReactivationDeliveryEligibility,
+      ),
+  );
+
+  server.registerTool(
+    "get_reactivation_wave_2_readiness",
+    {
+      description:
+        "Get the readonly Wave 2 readiness verdict before any 2026-06 reactivation follow-up send.",
+      inputSchema: inputSchema(reactivationWave2ReadinessQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_reactivation_wave_2_readiness",
+        "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-readiness",
+        input,
+        growthCampaignTools.getReactivationWave2Readiness,
       ),
   );
 
