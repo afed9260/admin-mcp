@@ -435,6 +435,13 @@ export const reactivationCampaignAudienceQuerySchema = z
 
 export const reactivationCampaignStateQuerySchema = reactivationCampaignAudienceQuerySchema;
 
+export const reactivationSendEligibilityQuerySchema = reactivationCampaignAudienceQuerySchema
+  .extend({
+    ruleId: z.string().trim().min(1).max(120).optional(),
+    semanticTouchKey: z.string().trim().min(1).max(160).optional(),
+  })
+  .strict();
+
 const hasExactlyOneReactivationTarget = ({
   audienceSegment,
   telegramUserIds,
@@ -497,6 +504,7 @@ export type NudgeTestSend = z.infer<typeof nudgeTestSendSchema>;
 export type ReactivationCampaignRunsQuery = z.infer<typeof reactivationCampaignRunsQuerySchema>;
 export type ReactivationCampaignAudienceQuery = z.infer<typeof reactivationCampaignAudienceQuerySchema>;
 export type ReactivationCampaignStateQuery = z.infer<typeof reactivationCampaignStateQuerySchema>;
+export type ReactivationSendEligibilityQuery = z.infer<typeof reactivationSendEligibilityQuerySchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
 export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;

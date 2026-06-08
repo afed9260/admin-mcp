@@ -337,6 +337,17 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.getReactivationDeliveryEligibility({
+        limit: 50,
+        ruleId: "reactivation_paid_avito_no_dialogs",
+        segment: "paid_avito_no_dialogs",
+        semanticTouchKey: "reactivation_2026_06_start_first_dialog",
+      }),
+    ).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/send-eligibility?segment=paid_avito_no_dialogs&limit=50&ruleId=reactivation_paid_avito_no_dialogs&semanticTouchKey=reactivation_2026_06_start_first_dialog",
+    });
+
+    await expect(
       tools.dryRunReactivationDialogCredits({
         audienceSegment: "paid_inactive_with_dialogs",
       }),

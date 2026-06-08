@@ -13,6 +13,7 @@ import {
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignStateQuerySchema,
   reactivationCampaignDryRunSchema,
+  reactivationSendEligibilityQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -85,6 +86,22 @@ describe("tool schemas", () => {
     ).toEqual({
       segment: "paid_inactive_with_dialogs",
       limit: 50,
+    });
+  });
+
+  it("validates reactivation send eligibility query", () => {
+    expect(
+      reactivationSendEligibilityQuerySchema.parse({
+        segment: "paid_avito_no_dialogs",
+        limit: 50,
+        ruleId: "reactivation_paid_avito_no_dialogs",
+        semanticTouchKey: "reactivation_2026_06_start_first_dialog",
+      }),
+    ).toEqual({
+      segment: "paid_avito_no_dialogs",
+      limit: 50,
+      ruleId: "reactivation_paid_avito_no_dialogs",
+      semanticTouchKey: "reactivation_2026_06_start_first_dialog",
     });
   });
 

@@ -73,6 +73,7 @@ describe("readonlyToolNames", () => {
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
       "get_reactivation_campaign_state",
+      "get_reactivation_delivery_eligibility",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);

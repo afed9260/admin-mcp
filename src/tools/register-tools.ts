@@ -35,6 +35,7 @@ import {
   reactivationCampaignNotificationSendSchema,
   reactivationCampaignRunsQuerySchema,
   reactivationCampaignStateQuerySchema,
+  reactivationSendEligibilityQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -68,6 +69,7 @@ export const readonlyToolNames = [
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
   "get_reactivation_campaign_state",
+  "get_reactivation_delivery_eligibility",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -535,6 +537,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/state",
         input,
         growthCampaignTools.getReactivationCampaignState,
+      ),
+  );
+
+  server.registerTool(
+    "get_reactivation_delivery_eligibility",
+    {
+      description:
+        "Get the unified readonly send eligibility verdict before any 2026-06 reactivation direct-message send.",
+      inputSchema: inputSchema(reactivationSendEligibilityQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_reactivation_delivery_eligibility",
+        "/growth-campaigns/reactivation-2026-06-wave-1/send-eligibility",
+        input,
+        growthCampaignTools.getReactivationDeliveryEligibility,
       ),
   );
 
