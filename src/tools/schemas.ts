@@ -451,6 +451,16 @@ export const reactivationWave2ReadinessQuerySchema = reactivationCampaignAudienc
 
 export const reactivationWave2PreviewQuerySchema = reactivationWave2ReadinessQuerySchema;
 
+export const reactivationWave2SendSchema = reactivationWave2PreviewQuerySchema
+  .extend({
+    ...writeConfirmation,
+    expectedWouldSend: z.number().int().min(1).max(1),
+    expectedRuleId: z.string().trim().min(1).max(120),
+    expectedPayloadHash: z.string().trim().regex(/^[a-f0-9]{64}$/),
+    expectedPreviewEvidenceHash: z.string().trim().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+
 const hasExactlyOneReactivationTarget = ({
   audienceSegment,
   telegramUserIds,
@@ -516,6 +526,7 @@ export type ReactivationCampaignStateQuery = z.infer<typeof reactivationCampaign
 export type ReactivationSendEligibilityQuery = z.infer<typeof reactivationSendEligibilityQuerySchema>;
 export type ReactivationWave2ReadinessQuery = z.infer<typeof reactivationWave2ReadinessQuerySchema>;
 export type ReactivationWave2PreviewQuery = z.infer<typeof reactivationWave2PreviewQuerySchema>;
+export type ReactivationWave2Send = z.infer<typeof reactivationWave2SendSchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
 export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;
