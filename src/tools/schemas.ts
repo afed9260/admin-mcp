@@ -444,10 +444,12 @@ export const reactivationSendEligibilityQuerySchema = reactivationCampaignAudien
 
 export const reactivationWave2ReadinessQuerySchema = reactivationCampaignAudienceQuerySchema
   .extend({
-    nextAction: z.enum(["start_first_dialog", "connect_avito", "sell_benefit"]).optional(),
+    nextAction: z.enum(["start_first_dialog", "connect_avito", "help_with_setup", "sell_package"]).optional(),
     semanticTouchKey: z.string().trim().min(1).max(160).optional(),
   })
   .strict();
+
+export const reactivationWave2PreviewQuerySchema = reactivationWave2ReadinessQuerySchema;
 
 const hasExactlyOneReactivationTarget = ({
   audienceSegment,
@@ -513,6 +515,7 @@ export type ReactivationCampaignAudienceQuery = z.infer<typeof reactivationCampa
 export type ReactivationCampaignStateQuery = z.infer<typeof reactivationCampaignStateQuerySchema>;
 export type ReactivationSendEligibilityQuery = z.infer<typeof reactivationSendEligibilityQuerySchema>;
 export type ReactivationWave2ReadinessQuery = z.infer<typeof reactivationWave2ReadinessQuerySchema>;
+export type ReactivationWave2PreviewQuery = z.infer<typeof reactivationWave2PreviewQuerySchema>;
 export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryRunSchema>;
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
 export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;

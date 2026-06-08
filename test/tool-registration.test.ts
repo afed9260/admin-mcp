@@ -75,6 +75,7 @@ describe("readonlyToolNames", () => {
       "get_reactivation_campaign_state",
       "get_reactivation_delivery_eligibility",
       "get_reactivation_wave_2_readiness",
+      "get_reactivation_wave_2_preview",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
