@@ -105,6 +105,7 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
+- `get_reactivation_campaign_state`
 
 These safe automation tools should also be visible without enabling guarded writes:
 
@@ -144,6 +145,7 @@ list_bot_funnel_customers with hasPayments=true and limit=5
 list_dialogs with limit=5
 list_reactivation_campaign_runs with limit=5
 list_reactivation_campaign_audience with segment=paid_avito_no_dialogs and limit=20
+get_reactivation_campaign_state with segment=paid_avito_no_dialogs and limit=20
 get_customer_operations_profile with telegramUserId=437078503
 dry_run_customer_dialog_launch_credits with telegramUserId=437078503, expectedTelegramUserId=437078503, idempotencyKey=support-ticket-smoke-dialog-credit, reason=smoke test dry run, slots=10
 dry_run_reactivation_dialog_credits with audienceSegment=paid_avito_no_dialogs

@@ -45,6 +45,7 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
+- `get_reactivation_campaign_state`
 
 Safe automation tools, available without `ADMIN_MCP_ENABLE_WRITE=true`:
 
