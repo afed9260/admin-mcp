@@ -348,6 +348,17 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.getReactivationWave2Readiness({
+        limit: 50,
+        nextAction: "start_first_dialog",
+        segment: "paid_avito_no_dialogs",
+        semanticTouchKey: "reactivation_2026_06_wave_2_start_first_dialog",
+      }),
+    ).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-readiness?segment=paid_avito_no_dialogs&limit=50&nextAction=start_first_dialog&semanticTouchKey=reactivation_2026_06_wave_2_start_first_dialog",
+    });
+
+    await expect(
       tools.dryRunReactivationDialogCredits({
         audienceSegment: "paid_inactive_with_dialogs",
       }),
