@@ -34,6 +34,7 @@ import {
   reactivationCampaignNotificationDryRunSchema,
   reactivationCampaignNotificationSendSchema,
   reactivationCampaignRunsQuerySchema,
+  reactivationCampaignStateQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -66,6 +67,7 @@ export const readonlyToolNames = [
   "list_referral_manual_review_items",
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
+  "get_reactivation_campaign_state",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -515,6 +517,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/audience",
         input,
         growthCampaignTools.listReactivationCampaignAudience,
+      ),
+  );
+
+  server.registerTool(
+    "get_reactivation_campaign_state",
+    {
+      description:
+        "Get readonly per-customer state for the 2026-06 reactivation campaign, including nextAction and safeToSend.",
+      inputSchema: inputSchema(reactivationCampaignStateQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_reactivation_campaign_state",
+        "/growth-campaigns/reactivation-2026-06-wave-1/state",
+        input,
+        growthCampaignTools.getReactivationCampaignState,
       ),
   );
 
