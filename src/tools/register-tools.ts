@@ -38,6 +38,7 @@ import {
   reactivationSendEligibilityQuerySchema,
   reactivationWave2PreviewQuerySchema,
   reactivationWave2ReadinessQuerySchema,
+  reactivationWave2SendSchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -92,6 +93,7 @@ export const writeToolNames = [
   "send_nudge_test",
   "apply_reactivation_dialog_credits",
   "send_reactivation_notification",
+  "send_reactivation_wave_2_preview",
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
   "apply_successful_dialog_debt_recovery",
@@ -782,6 +784,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/notification-send",
         input,
         growthCampaignTools.sendReactivationNotification,
+      ),
+  );
+
+  server.registerTool(
+    "send_reactivation_wave_2_preview",
+    {
+      description:
+        "Send one guarded Wave 2 reactivation follow-up using exact preview evidence. Requires confirm=true and expected hashes.",
+      inputSchema: inputSchema(reactivationWave2SendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "send_reactivation_wave_2_preview",
+        "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-send",
+        input,
+        growthCampaignTools.sendReactivationWave2Preview,
       ),
   );
 

@@ -410,6 +410,35 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.sendReactivationWave2Preview({
+        confirm: true,
+        expectedPayloadHash: "a".repeat(64),
+        expectedPreviewEvidenceHash: "b".repeat(64),
+        expectedRuleId: "reactivation_paid_no_avito_no_dialogs",
+        expectedWouldSend: 1,
+        limit: 50,
+        nextAction: "connect_avito",
+        reason: "approved one-person connect Avito follow-up",
+        segment: "paid_no_avito_no_dialogs",
+        semanticTouchKey: "reactivation_2026_06_wave_2_connect_avito",
+      }),
+    ).resolves.toEqual({
+      body: {
+        confirm: true,
+        expectedPayloadHash: "a".repeat(64),
+        expectedPreviewEvidenceHash: "b".repeat(64),
+        expectedRuleId: "reactivation_paid_no_avito_no_dialogs",
+        expectedWouldSend: 1,
+        limit: 50,
+        nextAction: "connect_avito",
+        reason: "approved one-person connect Avito follow-up",
+        segment: "paid_no_avito_no_dialogs",
+        semanticTouchKey: "reactivation_2026_06_wave_2_connect_avito",
+      },
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-send",
+    });
+
+    await expect(
       tools.applyReactivationDialogCredits({
         confirm: false,
         reason: "approved by campaign owner after dry-run",

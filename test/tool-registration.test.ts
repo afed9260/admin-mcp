@@ -92,6 +92,7 @@ describe("writeToolNames", () => {
       "send_nudge_test",
       "apply_reactivation_dialog_credits",
       "send_reactivation_notification",
+      "send_reactivation_wave_2_preview",
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
       "apply_successful_dialog_debt_recovery",
