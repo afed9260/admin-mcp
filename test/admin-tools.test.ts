@@ -328,6 +328,15 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.getReactivationCampaignState({
+        limit: 25,
+        segment: "paid_avito_no_dialogs",
+      }),
+    ).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/state?segment=paid_avito_no_dialogs&limit=25",
+    });
+
+    await expect(
       tools.dryRunReactivationDialogCredits({
         audienceSegment: "paid_inactive_with_dialogs",
       }),

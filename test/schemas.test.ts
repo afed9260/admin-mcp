@@ -11,6 +11,7 @@ import {
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
   reactivationCampaignAudienceQuerySchema,
+  reactivationCampaignStateQuerySchema,
   reactivationCampaignDryRunSchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
@@ -73,6 +74,18 @@ describe("tool schemas", () => {
       audienceSegment: "paid_inactive_with_dialogs",
     });
     expect(dryRun.audienceSegment).toBe("paid_inactive_with_dialogs");
+  });
+
+  it("validates reactivation campaign state query", () => {
+    expect(
+      reactivationCampaignStateQuerySchema.parse({
+        segment: "paid_inactive_with_dialogs",
+        limit: 50,
+      }),
+    ).toEqual({
+      segment: "paid_inactive_with_dialogs",
+      limit: 50,
+    });
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {

@@ -72,6 +72,7 @@ describe("readonlyToolNames", () => {
       "list_referral_manual_review_items",
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
+      "get_reactivation_campaign_state",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
