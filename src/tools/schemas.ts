@@ -504,6 +504,7 @@ export const reactivationCampaignNotificationSendSchema = reactivationCampaignAp
 export const broadRelaunchCampaignQuerySchema = z
   .object({
     limit: z.number().int().min(1).max(500).default(100),
+    segment: z.enum(["all", "high_intent"]).optional(),
   })
   .strict();
 
