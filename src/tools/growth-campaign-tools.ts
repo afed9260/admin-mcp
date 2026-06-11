@@ -1,6 +1,9 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
 import {
+  broadRelaunchCampaignQuerySchema,
+  broadRelaunchNotificationDryRunSchema,
+  broadRelaunchNotificationSendSchema,
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
@@ -16,6 +19,7 @@ import {
 } from "./schemas.js";
 
 const reactivationCampaignBasePath = "/growth-campaigns/reactivation-2026-06-wave-1";
+const broadRelaunchCampaignBasePath = "/growth-campaigns/reactivation-2026-06-broad-relaunch";
 
 function omitConfirmation(input: Record<string, unknown>): Record<string, unknown> {
   const { confirm, reason, ...body } = input;
@@ -82,6 +86,26 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async sendReactivationNotification(input: unknown) {
       const mutation = reactivationCampaignNotificationSendSchema.parse(input);
       return client.post(`${reactivationCampaignBasePath}/notification-send`, omitConfirmation(mutation));
+    },
+
+    async listBroadRelaunchAudience(input: unknown) {
+      const query = broadRelaunchCampaignQuerySchema.parse(input);
+      return client.get(`${broadRelaunchCampaignBasePath}/audience?${toSearchParams(query)}`);
+    },
+
+    async listBroadRelaunchRuns(input: unknown) {
+      const query = broadRelaunchCampaignQuerySchema.parse(input);
+      return client.get(`${broadRelaunchCampaignBasePath}/runs?${toSearchParams(query)}`);
+    },
+
+    async dryRunBroadRelaunchNotification(input: unknown) {
+      const body = broadRelaunchNotificationDryRunSchema.parse(input);
+      return client.post(`${broadRelaunchCampaignBasePath}/notification-dry-run`, body);
+    },
+
+    async sendBroadRelaunchNotification(input: unknown) {
+      const mutation = broadRelaunchNotificationSendSchema.parse(input);
+      return client.post(`${broadRelaunchCampaignBasePath}/notification-send`, omitConfirmation(mutation));
     },
   };
 }
