@@ -77,6 +77,8 @@ describe("readonlyToolNames", () => {
       "get_reactivation_wave_2_readiness",
       "get_reactivation_wave_2_preview",
       "get_reactivation_wave_2_source_reconciliation",
+      "list_broad_relaunch_audience",
+      "list_broad_relaunch_runs",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
@@ -94,6 +96,7 @@ describe("writeToolNames", () => {
       "apply_reactivation_dialog_credits",
       "send_reactivation_notification",
       "send_reactivation_wave_2_preview",
+      "send_broad_relaunch_notification",
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
       "apply_successful_dialog_debt_recovery",
@@ -112,6 +115,7 @@ describe("safeAutomationToolNames", () => {
       "dry_run_successful_dialog_debt_recovery",
       "dry_run_reactivation_dialog_credits",
       "dry_run_reactivation_notification",
+      "dry_run_broad_relaunch_notification",
     ]);
   });
 });

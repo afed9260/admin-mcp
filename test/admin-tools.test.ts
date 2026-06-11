@@ -463,4 +463,37 @@ describe("readonly admin tools", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("requests broad relaunch campaign endpoints", async () => {
+    const client = createClient();
+    const tools = createGrowthCampaignTools(client);
+
+    await expect(tools.listBroadRelaunchAudience({ limit: 75 })).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/audience?limit=75",
+    });
+    await expect(tools.listBroadRelaunchRuns({ limit: 10 })).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/runs?limit=10",
+    });
+    await expect(tools.dryRunBroadRelaunchNotification({ limit: 75 })).resolves.toEqual({
+      body: { limit: 75 },
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",
+    });
+    await expect(
+      tools.sendBroadRelaunchNotification({
+        confirm: true,
+        limit: 50,
+        reason: "approved by campaign owner after broad relaunch dry-run",
+      }),
+    ).resolves.toEqual({
+      body: { limit: 50 },
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-send",
+    });
+    await expect(
+      tools.sendBroadRelaunchNotification({
+        confirm: false,
+        limit: 50,
+        reason: "approved by campaign owner after broad relaunch dry-run",
+      }),
+    ).rejects.toThrow();
+  });
 });

@@ -11,6 +11,8 @@ import {
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
   reactivationCampaignAudienceQuerySchema,
+  broadRelaunchCampaignQuerySchema,
+  broadRelaunchNotificationSendSchema,
   reactivationCampaignStateQuerySchema,
   reactivationCampaignDryRunSchema,
   reactivationSendEligibilityQuerySchema,
@@ -103,6 +105,26 @@ describe("tool schemas", () => {
       ruleId: "reactivation_paid_avito_no_dialogs",
       semanticTouchKey: "reactivation_2026_06_start_first_dialog",
     });
+  });
+
+  it("validates broad relaunch campaign query and guarded send", () => {
+    expect(broadRelaunchCampaignQuerySchema.parse({})).toEqual({ limit: 100 });
+    expect(broadRelaunchCampaignQuerySchema.parse({ limit: 250 })).toEqual({ limit: 250 });
+    expect(() => broadRelaunchCampaignQuerySchema.parse({ limit: 501 })).toThrow();
+
+    expect(
+      broadRelaunchNotificationSendSchema.parse({
+        confirm: true,
+        limit: 50,
+        reason: "approved after saved dry-run",
+      }),
+    ).toEqual({
+      confirm: true,
+      limit: 50,
+      reason: "approved after saved dry-run",
+    });
+    expect(() => broadRelaunchNotificationSendSchema.parse({ limit: 50, reason: "approved" })).toThrow();
+    expect(() => broadRelaunchNotificationSendSchema.parse({ confirm: false, limit: 50, reason: "approved" })).toThrow();
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {

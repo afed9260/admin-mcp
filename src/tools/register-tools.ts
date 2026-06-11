@@ -8,6 +8,9 @@ import { createDialogTools } from "./dialog-tools.js";
 import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
 import {
+  broadRelaunchCampaignQuerySchema,
+  broadRelaunchNotificationDryRunSchema,
+  broadRelaunchNotificationSendSchema,
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
@@ -77,6 +80,8 @@ export const readonlyToolNames = [
   "get_reactivation_wave_2_readiness",
   "get_reactivation_wave_2_preview",
   "get_reactivation_wave_2_source_reconciliation",
+  "list_broad_relaunch_audience",
+  "list_broad_relaunch_runs",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -85,6 +90,7 @@ export const safeAutomationToolNames = [
   "dry_run_successful_dialog_debt_recovery",
   "dry_run_reactivation_dialog_credits",
   "dry_run_reactivation_notification",
+  "dry_run_broad_relaunch_notification",
 ] as const;
 
 export const writeToolNames = [
@@ -96,6 +102,7 @@ export const writeToolNames = [
   "apply_reactivation_dialog_credits",
   "send_reactivation_notification",
   "send_reactivation_wave_2_preview",
+  "send_broad_relaunch_notification",
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
   "apply_successful_dialog_debt_recovery",
@@ -620,6 +627,41 @@ function registerTools(
       ),
   );
 
+  server.registerTool(
+    "list_broad_relaunch_audience",
+    {
+      description:
+        "List readonly broad relaunch audience for current Telegram bot users before any 2026-06 broad reactivation send.",
+      inputSchema: inputSchema(broadRelaunchCampaignQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_broad_relaunch_audience",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/audience",
+        input,
+        growthCampaignTools.listBroadRelaunchAudience,
+      ),
+  );
+
+  server.registerTool(
+    "list_broad_relaunch_runs",
+    {
+      description: "List readonly dry-run and send history for the 2026-06 broad relaunch campaign.",
+      inputSchema: inputSchema(broadRelaunchCampaignQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_broad_relaunch_runs",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/runs",
+        input,
+        growthCampaignTools.listBroadRelaunchRuns,
+      ),
+  );
+
   if (options.includeSafeAutomationTools) {
     server.registerTool(
       "investigate_support_ticket",
@@ -707,6 +749,24 @@ function registerTools(
           "/growth-campaigns/reactivation-2026-06-wave-1/notification-dry-run",
           input,
           growthCampaignTools.dryRunReactivationNotification,
+        ),
+    );
+
+    server.registerTool(
+      "dry_run_broad_relaunch_notification",
+      {
+        description:
+          "Run a non-destructive dry-run for the 2026-06 broad relaunch notification. Persists an audit run but does not send messages.",
+        inputSchema: inputSchema(broadRelaunchNotificationDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_broad_relaunch_notification",
+          "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",
+          input,
+          growthCampaignTools.dryRunBroadRelaunchNotification,
         ),
     );
   }
@@ -822,6 +882,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-send",
         input,
         growthCampaignTools.sendReactivationWave2Preview,
+      ),
+  );
+
+  server.registerTool(
+    "send_broad_relaunch_notification",
+    {
+      description:
+        "Send the 2026-06 broad relaunch notification to current Telegram bot users. Requires confirm=true and reason.",
+      inputSchema: inputSchema(broadRelaunchNotificationSendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "send_broad_relaunch_notification",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-send",
+        input,
+        growthCampaignTools.sendBroadRelaunchNotification,
       ),
   );
 

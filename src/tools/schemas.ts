@@ -501,6 +501,20 @@ export const reactivationCampaignNotificationDryRunSchema = reactivationCampaign
 
 export const reactivationCampaignNotificationSendSchema = reactivationCampaignApplySchema;
 
+export const broadRelaunchCampaignQuerySchema = z
+  .object({
+    limit: z.number().int().min(1).max(500).default(100),
+  })
+  .strict();
+
+export const broadRelaunchNotificationDryRunSchema = broadRelaunchCampaignQuerySchema;
+
+export const broadRelaunchNotificationSendSchema = broadRelaunchCampaignQuerySchema
+  .extend({
+    ...writeConfirmation,
+  })
+  .strict();
+
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
@@ -540,3 +554,6 @@ export type ReactivationCampaignDryRun = z.infer<typeof reactivationCampaignDryR
 export type ReactivationCampaignApply = z.infer<typeof reactivationCampaignApplySchema>;
 export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivationCampaignNotificationDryRunSchema>;
 export type ReactivationCampaignNotificationSend = z.infer<typeof reactivationCampaignNotificationSendSchema>;
+export type BroadRelaunchCampaignQuery = z.infer<typeof broadRelaunchCampaignQuerySchema>;
+export type BroadRelaunchNotificationDryRun = z.infer<typeof broadRelaunchNotificationDryRunSchema>;
+export type BroadRelaunchNotificationSend = z.infer<typeof broadRelaunchNotificationSendSchema>;
