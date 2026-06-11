@@ -110,17 +110,23 @@ describe("tool schemas", () => {
   it("validates broad relaunch campaign query and guarded send", () => {
     expect(broadRelaunchCampaignQuerySchema.parse({})).toEqual({ limit: 100 });
     expect(broadRelaunchCampaignQuerySchema.parse({ limit: 250 })).toEqual({ limit: 250 });
+    expect(broadRelaunchCampaignQuerySchema.parse({ limit: 50, segment: "high_intent" })).toEqual({
+      limit: 50,
+      segment: "high_intent",
+    });
     expect(() => broadRelaunchCampaignQuerySchema.parse({ limit: 501 })).toThrow();
 
     expect(
       broadRelaunchNotificationSendSchema.parse({
         confirm: true,
         limit: 50,
+        segment: "high_intent",
         reason: "approved after saved dry-run",
       }),
     ).toEqual({
       confirm: true,
       limit: 50,
+      segment: "high_intent",
       reason: "approved after saved dry-run",
     });
     expect(() => broadRelaunchNotificationSendSchema.parse({ limit: 50, reason: "approved" })).toThrow();

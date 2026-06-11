@@ -468,8 +468,8 @@ describe("readonly admin tools", () => {
     const client = createClient();
     const tools = createGrowthCampaignTools(client);
 
-    await expect(tools.listBroadRelaunchAudience({ limit: 75 })).resolves.toEqual({
-      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/audience?limit=75",
+    await expect(tools.listBroadRelaunchAudience({ limit: 75, segment: "high_intent" })).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/audience?limit=75&segment=high_intent",
     });
     await expect(tools.listBroadRelaunchRuns({ limit: 10 })).resolves.toEqual({
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/runs?limit=10",
@@ -477,18 +477,19 @@ describe("readonly admin tools", () => {
     await expect(tools.getBroadRelaunchReactions({})).resolves.toEqual({
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/reactions",
     });
-    await expect(tools.dryRunBroadRelaunchNotification({ limit: 75 })).resolves.toEqual({
-      body: { limit: 75 },
+    await expect(tools.dryRunBroadRelaunchNotification({ limit: 75, segment: "high_intent" })).resolves.toEqual({
+      body: { limit: 75, segment: "high_intent" },
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",
     });
     await expect(
       tools.sendBroadRelaunchNotification({
         confirm: true,
         limit: 50,
+        segment: "high_intent",
         reason: "approved by campaign owner after broad relaunch dry-run",
       }),
     ).resolves.toEqual({
-      body: { limit: 50 },
+      body: { limit: 50, segment: "high_intent" },
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-send",
     });
     await expect(
