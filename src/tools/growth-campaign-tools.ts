@@ -12,6 +12,7 @@ import {
   reactivationWave2PreviewQuerySchema,
   reactivationWave2ReadinessQuerySchema,
   reactivationWave2SendSchema,
+  reactivationWave2SourceReconciliationQuerySchema,
 } from "./schemas.js";
 
 const reactivationCampaignBasePath = "/growth-campaigns/reactivation-2026-06-wave-1";
@@ -51,6 +52,11 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async getReactivationWave2Preview(input: unknown) {
       const query = reactivationWave2PreviewQuerySchema.parse(input);
       return client.get(`${reactivationCampaignBasePath}/wave-2-preview?${toSearchParams(query)}`);
+    },
+
+    async getReactivationWave2SourceReconciliation(input: unknown) {
+      const query = reactivationWave2SourceReconciliationQuerySchema.parse(input);
+      return client.get(`${reactivationCampaignBasePath}/wave-2-source-reconciliation?${toSearchParams(query)}`);
     },
 
     async sendReactivationWave2Preview(input: unknown) {

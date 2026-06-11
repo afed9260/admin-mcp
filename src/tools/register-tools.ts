@@ -39,6 +39,7 @@ import {
   reactivationWave2PreviewQuerySchema,
   reactivationWave2ReadinessQuerySchema,
   reactivationWave2SendSchema,
+  reactivationWave2SourceReconciliationQuerySchema,
   supportActionBatchSchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
@@ -75,6 +76,7 @@ export const readonlyToolNames = [
   "get_reactivation_delivery_eligibility",
   "get_reactivation_wave_2_readiness",
   "get_reactivation_wave_2_preview",
+  "get_reactivation_wave_2_source_reconciliation",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -597,6 +599,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-preview",
         input,
         growthCampaignTools.getReactivationWave2Preview,
+      ),
+  );
+
+  server.registerTool(
+    "get_reactivation_wave_2_source_reconciliation",
+    {
+      description:
+        "Get the readonly Wave 2 source reconciliation view comparing Campaign State with Delivery Eligibility before deciding whether any segment can be contacted.",
+      inputSchema: inputSchema(reactivationWave2SourceReconciliationQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_reactivation_wave_2_source_reconciliation",
+        "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-source-reconciliation",
+        input,
+        growthCampaignTools.getReactivationWave2SourceReconciliation,
       ),
   );
 

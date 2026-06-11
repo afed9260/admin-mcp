@@ -370,6 +370,15 @@ describe("readonly admin tools", () => {
     });
 
     await expect(
+      tools.getReactivationWave2SourceReconciliation({
+        limit: 50,
+        segment: "paid_no_avito_no_dialogs",
+      }),
+    ).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-source-reconciliation?segment=paid_no_avito_no_dialogs&limit=50",
+    });
+
+    await expect(
       tools.dryRunReactivationDialogCredits({
         audienceSegment: "paid_inactive_with_dialogs",
       }),
