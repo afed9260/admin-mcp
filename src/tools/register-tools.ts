@@ -11,6 +11,7 @@ import {
   broadRelaunchCampaignQuerySchema,
   broadRelaunchNotificationDryRunSchema,
   broadRelaunchNotificationSendSchema,
+  broadRelaunchReactionQuerySchema,
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
@@ -82,6 +83,7 @@ export const readonlyToolNames = [
   "get_reactivation_wave_2_source_reconciliation",
   "list_broad_relaunch_audience",
   "list_broad_relaunch_runs",
+  "get_broad_relaunch_reactions",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -659,6 +661,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-broad-relaunch/runs",
         input,
         growthCampaignTools.listBroadRelaunchRuns,
+      ),
+  );
+
+  server.registerTool(
+    "get_broad_relaunch_reactions",
+    {
+      description:
+        "Get readonly attributed reaction summary for the 2026-06 broad relaunch notification recipients.",
+      inputSchema: inputSchema(broadRelaunchReactionQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_broad_relaunch_reactions",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/reactions",
+        input,
+        growthCampaignTools.getBroadRelaunchReactions,
       ),
   );
 

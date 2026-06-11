@@ -4,6 +4,7 @@ import {
   broadRelaunchCampaignQuerySchema,
   broadRelaunchNotificationDryRunSchema,
   broadRelaunchNotificationSendSchema,
+  broadRelaunchReactionQuerySchema,
   reactivationCampaignAudienceQuerySchema,
   reactivationCampaignApplySchema,
   reactivationCampaignDryRunSchema,
@@ -96,6 +97,11 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async listBroadRelaunchRuns(input: unknown) {
       const query = broadRelaunchCampaignQuerySchema.parse(input);
       return client.get(`${broadRelaunchCampaignBasePath}/runs?${toSearchParams(query)}`);
+    },
+
+    async getBroadRelaunchReactions(input: unknown) {
+      broadRelaunchReactionQuerySchema.parse(input);
+      return client.get(`${broadRelaunchCampaignBasePath}/reactions`);
     },
 
     async dryRunBroadRelaunchNotification(input: unknown) {
