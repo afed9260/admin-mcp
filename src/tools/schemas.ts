@@ -510,6 +510,15 @@ export const broadRelaunchCampaignQuerySchema = z
 
 export const broadRelaunchReactionQuerySchema = z.object({}).strict();
 
+export const broadRelaunchCompensationDryRunSchema = broadRelaunchCampaignQuerySchema.omit({ segment: true });
+
+export const broadRelaunchCompensationSendSchema = broadRelaunchCompensationDryRunSchema
+  .extend({
+    expectedWouldSend: z.number().int().min(1).max(500),
+    ...writeConfirmation,
+  })
+  .strict();
+
 export const broadRelaunchNotificationDryRunSchema = broadRelaunchCampaignQuerySchema;
 
 export const broadRelaunchNotificationSendSchema = broadRelaunchCampaignQuerySchema
@@ -559,5 +568,7 @@ export type ReactivationCampaignNotificationDryRun = z.infer<typeof reactivation
 export type ReactivationCampaignNotificationSend = z.infer<typeof reactivationCampaignNotificationSendSchema>;
 export type BroadRelaunchCampaignQuery = z.infer<typeof broadRelaunchCampaignQuerySchema>;
 export type BroadRelaunchReactionQuery = z.infer<typeof broadRelaunchReactionQuerySchema>;
+export type BroadRelaunchCompensationDryRun = z.infer<typeof broadRelaunchCompensationDryRunSchema>;
+export type BroadRelaunchCompensationSend = z.infer<typeof broadRelaunchCompensationSendSchema>;
 export type BroadRelaunchNotificationDryRun = z.infer<typeof broadRelaunchNotificationDryRunSchema>;
 export type BroadRelaunchNotificationSend = z.infer<typeof broadRelaunchNotificationSendSchema>;

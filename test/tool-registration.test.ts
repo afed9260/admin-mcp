@@ -98,6 +98,7 @@ describe("writeToolNames", () => {
       "apply_reactivation_dialog_credits",
       "send_reactivation_notification",
       "send_reactivation_wave_2_preview",
+      "send_broad_relaunch_compensation",
       "send_broad_relaunch_notification",
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
@@ -118,6 +119,7 @@ describe("safeAutomationToolNames", () => {
       "dry_run_reactivation_dialog_credits",
       "dry_run_reactivation_notification",
       "dry_run_broad_relaunch_notification",
+      "dry_run_broad_relaunch_compensation",
     ]);
   });
 });

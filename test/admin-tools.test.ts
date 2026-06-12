@@ -12,7 +12,12 @@ function createClient() {
     post: vi.fn(async (path: string, body: unknown) => ({ body, path })),
     postForm: vi.fn(async (path: string, body: FormData) => ({ body, path })),
     put: vi.fn(async (path: string, body: unknown) => ({ body, path })),
-  } as unknown as AdminApiClient & { get: ReturnType<typeof vi.fn> };
+  } as unknown as AdminApiClient & {
+    get: ReturnType<typeof vi.fn>;
+    post: ReturnType<typeof vi.fn>;
+    postForm: ReturnType<typeof vi.fn>;
+    put: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe("readonly admin tools", () => {
@@ -480,6 +485,47 @@ describe("readonly admin tools", () => {
     await expect(tools.getBroadRelaunchRecoveryState({ limit: 75 })).resolves.toEqual({
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/recovery-state?limit=75",
     });
+    await expect(tools.dryRunBroadRelaunchCompensation({ limit: 125 })).resolves.toEqual({
+      body: { limit: 125 },
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-dry-run",
+    });
+    client.post.mockClear();
+    client.post
+      .mockResolvedValueOnce({ would_send: 125 })
+      .mockResolvedValueOnce({
+        body: { limit: 125 },
+        path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-send",
+      });
+    await expect(
+      tools.sendBroadRelaunchCompensation({
+        confirm: true,
+        expectedWouldSend: 125,
+        limit: 125,
+        reason: "approved after dry-run matched 125 compensation recipients",
+      }),
+    ).resolves.toEqual({
+      body: { limit: 125 },
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-send",
+    });
+    expect(client.post).toHaveBeenNthCalledWith(
+      1,
+      "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-dry-run",
+      { limit: 125 },
+    );
+    expect(client.post).toHaveBeenNthCalledWith(
+      2,
+      "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-send",
+      { limit: 125 },
+    );
+    client.post.mockResolvedValueOnce({ would_send: 124 });
+    await expect(
+      tools.sendBroadRelaunchCompensation({
+        confirm: true,
+        expectedWouldSend: 125,
+        limit: 125,
+        reason: "approved after dry-run matched 125 compensation recipients",
+      }),
+    ).rejects.toThrow("expectedWouldSend mismatch");
     await expect(tools.dryRunBroadRelaunchNotification({ limit: 75, segment: "high_intent" })).resolves.toEqual({
       body: { limit: 75, segment: "high_intent" },
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",

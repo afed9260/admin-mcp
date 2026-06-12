@@ -9,6 +9,8 @@ import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
 import {
   broadRelaunchCampaignQuerySchema,
+  broadRelaunchCompensationDryRunSchema,
+  broadRelaunchCompensationSendSchema,
   broadRelaunchNotificationDryRunSchema,
   broadRelaunchNotificationSendSchema,
   broadRelaunchReactionQuerySchema,
@@ -94,6 +96,7 @@ export const safeAutomationToolNames = [
   "dry_run_reactivation_dialog_credits",
   "dry_run_reactivation_notification",
   "dry_run_broad_relaunch_notification",
+  "dry_run_broad_relaunch_compensation",
 ] as const;
 
 export const writeToolNames = [
@@ -105,6 +108,7 @@ export const writeToolNames = [
   "apply_reactivation_dialog_credits",
   "send_reactivation_notification",
   "send_reactivation_wave_2_preview",
+  "send_broad_relaunch_compensation",
   "send_broad_relaunch_notification",
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
@@ -805,7 +809,25 @@ function registerTools(
           "dry_run_broad_relaunch_notification",
           "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",
           input,
-          growthCampaignTools.dryRunBroadRelaunchNotification,
+        growthCampaignTools.dryRunBroadRelaunchNotification,
+      ),
+    );
+
+    server.registerTool(
+      "dry_run_broad_relaunch_compensation",
+      {
+        description:
+          "Run a non-destructive dry-run for compensating historical broad relaunch recipients who need the promised 10 dialog-launch credits. Persists an audit run but does not grant credits or send messages.",
+        inputSchema: inputSchema(broadRelaunchCompensationDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_broad_relaunch_compensation",
+          "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-dry-run",
+          input,
+          growthCampaignTools.dryRunBroadRelaunchCompensation,
         ),
     );
   }
@@ -921,6 +943,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-wave-1/wave-2-send",
         input,
         growthCampaignTools.sendReactivationWave2Preview,
+      ),
+  );
+
+  server.registerTool(
+    "send_broad_relaunch_compensation",
+    {
+      description:
+        "Compensate historical broad relaunch recipients: run a fresh dry-run, require expectedWouldSend to match, grant the promised 10 dialog-launch credits, then send the recovery message. Requires confirm=true and reason.",
+      inputSchema: inputSchema(broadRelaunchCompensationSendSchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "send_broad_relaunch_compensation",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/compensation-send",
+        input,
+        growthCampaignTools.sendBroadRelaunchCompensation,
       ),
   );
 

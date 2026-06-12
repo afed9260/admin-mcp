@@ -12,6 +12,8 @@ import {
   nudgeHistoryQuerySchema,
   reactivationCampaignAudienceQuerySchema,
   broadRelaunchCampaignQuerySchema,
+  broadRelaunchCompensationDryRunSchema,
+  broadRelaunchCompensationSendSchema,
   broadRelaunchNotificationSendSchema,
   reactivationCampaignStateQuerySchema,
   reactivationCampaignDryRunSchema,
@@ -131,6 +133,35 @@ describe("tool schemas", () => {
     });
     expect(() => broadRelaunchNotificationSendSchema.parse({ limit: 50, reason: "approved" })).toThrow();
     expect(() => broadRelaunchNotificationSendSchema.parse({ confirm: false, limit: 50, reason: "approved" })).toThrow();
+  });
+
+  it("validates broad relaunch compensation dry-run and guarded send", () => {
+    expect(broadRelaunchCompensationDryRunSchema.parse({ limit: 125 })).toEqual({ limit: 125 });
+    expect(() => broadRelaunchCompensationDryRunSchema.parse({ limit: 125, segment: "high_intent" })).toThrow();
+
+    expect(
+      broadRelaunchCompensationSendSchema.parse({
+        confirm: true,
+        expectedWouldSend: 125,
+        limit: 125,
+        reason: "approved after saved dry-run",
+      }),
+    ).toEqual({
+      confirm: true,
+      expectedWouldSend: 125,
+      limit: 125,
+      reason: "approved after saved dry-run",
+    });
+    expect(() => broadRelaunchCompensationSendSchema.parse({ confirm: true, limit: 125, reason: "approved" })).toThrow();
+    expect(() =>
+      broadRelaunchCompensationSendSchema.parse({
+        confirm: true,
+        expectedWouldSend: 125,
+        limit: 125,
+        reason: "approved",
+        segment: "high_intent",
+      }),
+    ).toThrow();
   });
 
   it("rejects invalid bot funnel customer stuck days", () => {
