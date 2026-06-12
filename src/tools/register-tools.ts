@@ -776,7 +776,7 @@ function registerTools(
       "dry_run_broad_relaunch_notification",
       {
         description:
-          "Run a non-destructive dry-run for the 2026-06 broad relaunch notification. Persists an audit run but does not send messages.",
+          "Run a non-destructive dry-run for the 2026-06 broad relaunch grant-backed notification. Persists an audit run but does not grant credits or send messages.",
         inputSchema: inputSchema(broadRelaunchNotificationDryRunSchema),
         annotations: writeAnnotations,
       },
@@ -909,7 +909,7 @@ function registerTools(
     "send_broad_relaunch_notification",
     {
       description:
-        "Send the 2026-06 broad relaunch notification to current Telegram bot users. Requires confirm=true and reason.",
+        "Grant 10 dialog-launch credits, then send the 2026-06 broad relaunch notification to current Telegram bot users. If credit grant fails for a user, that user is not messaged. Requires confirm=true and reason.",
       inputSchema: inputSchema(broadRelaunchNotificationSendSchema),
       annotations: writeAnnotations,
     },
