@@ -2,6 +2,8 @@ import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
 import {
   broadRelaunchCampaignQuerySchema,
+  broadRelaunchCompensationDryRunSchema,
+  broadRelaunchCompensationSendSchema,
   broadRelaunchNotificationDryRunSchema,
   broadRelaunchNotificationSendSchema,
   broadRelaunchReactionQuerySchema,
@@ -23,7 +25,7 @@ const reactivationCampaignBasePath = "/growth-campaigns/reactivation-2026-06-wav
 const broadRelaunchCampaignBasePath = "/growth-campaigns/reactivation-2026-06-broad-relaunch";
 
 function omitConfirmation(input: Record<string, unknown>): Record<string, unknown> {
-  const { confirm, reason, ...body } = input;
+  const { confirm, expectedWouldSend, reason, ...body } = input;
   return body;
 }
 
@@ -107,6 +109,26 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
     async getBroadRelaunchRecoveryState(input: unknown) {
       const query = broadRelaunchCampaignQuerySchema.parse(input);
       return client.get(`${broadRelaunchCampaignBasePath}/recovery-state?${toSearchParams(query)}`);
+    },
+
+    async dryRunBroadRelaunchCompensation(input: unknown) {
+      const body = broadRelaunchCompensationDryRunSchema.parse(input);
+      return client.post(`${broadRelaunchCampaignBasePath}/compensation-dry-run`, body);
+    },
+
+    async sendBroadRelaunchCompensation(input: unknown) {
+      const mutation = broadRelaunchCompensationSendSchema.parse(input);
+      const body = omitConfirmation(mutation);
+      const dryRun = (await client.post(`${broadRelaunchCampaignBasePath}/compensation-dry-run`, body)) as {
+        would_send?: number;
+      };
+      const wouldSend = Number(dryRun.would_send ?? 0);
+      if (wouldSend !== mutation.expectedWouldSend) {
+        throw new Error(
+          `Broad relaunch compensation expectedWouldSend mismatch: expected ${mutation.expectedWouldSend}, got ${wouldSend}`,
+        );
+      }
+      return client.post(`${broadRelaunchCampaignBasePath}/compensation-send`, body);
     },
 
     async dryRunBroadRelaunchNotification(input: unknown) {
