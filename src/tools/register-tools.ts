@@ -84,6 +84,7 @@ export const readonlyToolNames = [
   "list_broad_relaunch_audience",
   "list_broad_relaunch_runs",
   "get_broad_relaunch_reactions",
+  "get_broad_relaunch_recovery_state",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -679,6 +680,24 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-broad-relaunch/reactions",
         input,
         growthCampaignTools.getBroadRelaunchReactions,
+      ),
+  );
+
+  server.registerTool(
+    "get_broad_relaunch_recovery_state",
+    {
+      description:
+        "Get readonly recovery state for historical 2026-06 broad relaunch recipients: offer backing, capacity-at-send, outgoing attempts, and recommended next action.",
+      inputSchema: inputSchema(broadRelaunchCampaignQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_broad_relaunch_recovery_state",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/recovery-state",
+        input,
+        growthCampaignTools.getBroadRelaunchRecoveryState,
       ),
   );
 

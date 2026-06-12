@@ -477,6 +477,9 @@ describe("readonly admin tools", () => {
     await expect(tools.getBroadRelaunchReactions({})).resolves.toEqual({
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/reactions",
     });
+    await expect(tools.getBroadRelaunchRecoveryState({ limit: 75 })).resolves.toEqual({
+      path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/recovery-state?limit=75",
+    });
     await expect(tools.dryRunBroadRelaunchNotification({ limit: 75, segment: "high_intent" })).resolves.toEqual({
       body: { limit: 75, segment: "high_intent" },
       path: "/growth-campaigns/reactivation-2026-06-broad-relaunch/notification-dry-run",

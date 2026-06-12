@@ -104,6 +104,11 @@ export function createGrowthCampaignTools(client: AdminApiClient) {
       return client.get(`${broadRelaunchCampaignBasePath}/reactions`);
     },
 
+    async getBroadRelaunchRecoveryState(input: unknown) {
+      const query = broadRelaunchCampaignQuerySchema.parse(input);
+      return client.get(`${broadRelaunchCampaignBasePath}/recovery-state?${toSearchParams(query)}`);
+    },
+
     async dryRunBroadRelaunchNotification(input: unknown) {
       const body = broadRelaunchNotificationDryRunSchema.parse(input);
       return client.post(`${broadRelaunchCampaignBasePath}/notification-dry-run`, body);
