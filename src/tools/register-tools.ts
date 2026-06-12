@@ -84,6 +84,7 @@ export const readonlyToolNames = [
   "list_broad_relaunch_audience",
   "list_broad_relaunch_runs",
   "get_broad_relaunch_reactions",
+  "get_broad_relaunch_recovery_state",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -682,6 +683,24 @@ function registerTools(
       ),
   );
 
+  server.registerTool(
+    "get_broad_relaunch_recovery_state",
+    {
+      description:
+        "Get readonly recovery state for historical 2026-06 broad relaunch recipients: offer backing, capacity-at-send, outgoing attempts, and recommended next action.",
+      inputSchema: inputSchema(broadRelaunchCampaignQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_broad_relaunch_recovery_state",
+        "/growth-campaigns/reactivation-2026-06-broad-relaunch/recovery-state",
+        input,
+        growthCampaignTools.getBroadRelaunchRecoveryState,
+      ),
+  );
+
   if (options.includeSafeAutomationTools) {
     server.registerTool(
       "investigate_support_ticket",
@@ -776,7 +795,7 @@ function registerTools(
       "dry_run_broad_relaunch_notification",
       {
         description:
-          "Run a non-destructive dry-run for the 2026-06 broad relaunch notification. Persists an audit run but does not send messages.",
+          "Run a non-destructive dry-run for the 2026-06 broad relaunch grant-backed notification. Persists an audit run but does not grant credits or send messages.",
         inputSchema: inputSchema(broadRelaunchNotificationDryRunSchema),
         annotations: writeAnnotations,
       },
@@ -909,7 +928,7 @@ function registerTools(
     "send_broad_relaunch_notification",
     {
       description:
-        "Send the 2026-06 broad relaunch notification to current Telegram bot users. Requires confirm=true and reason.",
+        "Grant 10 dialog-launch credits, then send the 2026-06 broad relaunch notification to current Telegram bot users. If credit grant fails for a user, that user is not messaged. Requires confirm=true and reason.",
       inputSchema: inputSchema(broadRelaunchNotificationSendSchema),
       annotations: writeAnnotations,
     },
