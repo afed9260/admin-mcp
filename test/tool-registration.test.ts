@@ -81,6 +81,8 @@ describe("readonlyToolNames", () => {
       "list_broad_relaunch_runs",
       "get_broad_relaunch_reactions",
       "get_broad_relaunch_recovery_state",
+      "get_lifecycle_marketing_segments",
+      "list_lifecycle_marketing_segment_users",
     ]);
 
     expect(readonlyToolNames.join(" ")).not.toMatch(/create|update|delete|toggle|send|broadcast/i);
