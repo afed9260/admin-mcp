@@ -527,6 +527,31 @@ export const broadRelaunchNotificationSendSchema = broadRelaunchCampaignQuerySch
   })
   .strict();
 
+export const lifecycleMarketingSegmentIdSchema = z.enum([
+  "free_dialogs_exhausted_no_purchase",
+  "successful_dialog_no_purchase",
+  "dialogs_started_no_success",
+  "first_dialog_started_low_volume",
+  "setup_complete_no_dialog",
+  "avito_connected_setup_incomplete",
+  "personal_avito_required",
+  "avito_pro_blocked",
+  "avito_auth_started_not_finished",
+  "intro_shown_no_avito",
+  "paid_inactive",
+  "no_marketing_action",
+]);
+
+export const lifecycleMarketingSegmentsQuerySchema = z.object({}).strict();
+
+export const lifecycleMarketingSegmentUsersQuerySchema = z
+  .object({
+    segmentId: lifecycleMarketingSegmentIdSchema,
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
@@ -572,3 +597,6 @@ export type BroadRelaunchCompensationDryRun = z.infer<typeof broadRelaunchCompen
 export type BroadRelaunchCompensationSend = z.infer<typeof broadRelaunchCompensationSendSchema>;
 export type BroadRelaunchNotificationDryRun = z.infer<typeof broadRelaunchNotificationDryRunSchema>;
 export type BroadRelaunchNotificationSend = z.infer<typeof broadRelaunchNotificationSendSchema>;
+export type LifecycleMarketingSegmentId = z.infer<typeof lifecycleMarketingSegmentIdSchema>;
+export type LifecycleMarketingSegmentsQuery = z.infer<typeof lifecycleMarketingSegmentsQuerySchema>;
+export type LifecycleMarketingSegmentUsersQuery = z.infer<typeof lifecycleMarketingSegmentUsersQuerySchema>;

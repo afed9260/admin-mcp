@@ -10,6 +10,9 @@ import {
   dateString,
   funnelQuerySchema,
   nudgeHistoryQuerySchema,
+  lifecycleMarketingSegmentIdSchema,
+  lifecycleMarketingSegmentsQuerySchema,
+  lifecycleMarketingSegmentUsersQuerySchema,
   reactivationCampaignAudienceQuerySchema,
   broadRelaunchCampaignQuerySchema,
   broadRelaunchCompensationDryRunSchema,
@@ -107,6 +110,66 @@ describe("tool schemas", () => {
       ruleId: "reactivation_paid_avito_no_dialogs",
       semanticTouchKey: "reactivation_2026_06_start_first_dialog",
     });
+  });
+
+  it("validates lifecycle marketing segment queries", () => {
+    expect(lifecycleMarketingSegmentsQuerySchema.parse({})).toEqual({});
+    expect(() => lifecycleMarketingSegmentsQuerySchema.parse({ limit: 50 })).toThrow();
+
+    expect(lifecycleMarketingSegmentIdSchema.options).toEqual([
+      "free_dialogs_exhausted_no_purchase",
+      "successful_dialog_no_purchase",
+      "dialogs_started_no_success",
+      "first_dialog_started_low_volume",
+      "setup_complete_no_dialog",
+      "avito_connected_setup_incomplete",
+      "personal_avito_required",
+      "avito_pro_blocked",
+      "avito_auth_started_not_finished",
+      "intro_shown_no_avito",
+      "paid_inactive",
+      "no_marketing_action",
+    ]);
+
+    expect(
+      lifecycleMarketingSegmentUsersQuerySchema.parse({
+        segmentId: "free_dialogs_exhausted_no_purchase",
+      }),
+    ).toEqual({
+      segmentId: "free_dialogs_exhausted_no_purchase",
+      page: 1,
+      limit: 50,
+    });
+
+    expect(
+      lifecycleMarketingSegmentUsersQuerySchema.parse({
+        segmentId: "paid_inactive",
+        page: 3,
+        limit: 100,
+      }),
+    ).toEqual({
+      segmentId: "paid_inactive",
+      page: 3,
+      limit: 100,
+    });
+
+    expect(() =>
+      lifecycleMarketingSegmentUsersQuerySchema.parse({
+        segmentId: "paid_inactive",
+        limit: 101,
+      }),
+    ).toThrow();
+    expect(() =>
+      lifecycleMarketingSegmentUsersQuerySchema.parse({
+        segmentId: "unknown_segment",
+      }),
+    ).toThrow();
+    expect(() =>
+      lifecycleMarketingSegmentUsersQuerySchema.parse({
+        confirm: true,
+        segmentId: "paid_inactive",
+      }),
+    ).toThrow();
   });
 
   it("validates broad relaunch campaign query and guarded send", () => {

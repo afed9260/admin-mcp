@@ -3,6 +3,7 @@ import { AdminApiClient } from "../src/backend/admin-api-client.js";
 import { createDialogTools } from "../src/tools/dialog-tools.js";
 import { createNudgeTools } from "../src/tools/nudge-tools.js";
 import { createGrowthCampaignTools } from "../src/tools/growth-campaign-tools.js";
+import { createLifecycleMarketingTools } from "../src/tools/lifecycle-marketing-tools.js";
 import { createStatisticsTools } from "../src/tools/statistics-tools.js";
 import { createSupportTools } from "../src/tools/support-tools.js";
 
@@ -546,6 +547,31 @@ describe("readonly admin tools", () => {
         confirm: false,
         limit: 50,
         reason: "approved by campaign owner after broad relaunch dry-run",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("requests lifecycle marketing segment endpoints", async () => {
+    const client = createClient();
+    const tools = createLifecycleMarketingTools(client);
+
+    await expect(tools.getLifecycleMarketingSegments({})).resolves.toEqual({
+      path: "/lifecycle-marketing/segments",
+    });
+
+    await expect(
+      tools.listLifecycleMarketingSegmentUsers({
+        segmentId: "setup_complete_no_dialog",
+        page: 2,
+        limit: 25,
+      }),
+    ).resolves.toEqual({
+      path: "/lifecycle-marketing/segments/setup_complete_no_dialog/users?page=2&limit=25",
+    });
+
+    await expect(
+      tools.listLifecycleMarketingSegmentUsers({
+        segmentId: "avito/pro",
       }),
     ).rejects.toThrow();
   });

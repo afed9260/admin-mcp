@@ -6,6 +6,7 @@ import { AdminMcpConfig } from "../config.js";
 import { createCustomerOperationsTools } from "./customer-operations-tools.js";
 import { createDialogTools } from "./dialog-tools.js";
 import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
+import { createLifecycleMarketingTools } from "./lifecycle-marketing-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
 import {
   broadRelaunchCampaignQuerySchema,
@@ -24,6 +25,8 @@ import {
   dialogDetailQuerySchema,
   dialogsQuerySchema,
   funnelQuerySchema,
+  lifecycleMarketingSegmentsQuerySchema,
+  lifecycleMarketingSegmentUsersQuerySchema,
   nudgeCandidatesQuerySchema,
   nudgeHistoryQuerySchema,
   nudgePhotoUploadSchema,
@@ -87,6 +90,8 @@ export const readonlyToolNames = [
   "list_broad_relaunch_runs",
   "get_broad_relaunch_reactions",
   "get_broad_relaunch_recovery_state",
+  "get_lifecycle_marketing_segments",
+  "list_lifecycle_marketing_segment_users",
 ] as const;
 
 export const safeAutomationToolNames = [
@@ -237,6 +242,7 @@ function registerTools(
   const statisticsTools = createStatisticsTools(client);
   const dialogTools = createDialogTools(client);
   const growthCampaignTools = createGrowthCampaignTools(client);
+  const lifecycleMarketingTools = createLifecycleMarketingTools(client);
   const nudgeTools = createNudgeTools(client);
   const supportTools = createSupportTools(client);
   const customerOperationsTools = createCustomerOperationsTools(client);
@@ -702,6 +708,42 @@ function registerTools(
         "/growth-campaigns/reactivation-2026-06-broad-relaunch/recovery-state",
         input,
         growthCampaignTools.getBroadRelaunchRecoveryState,
+      ),
+  );
+
+  server.registerTool(
+    "get_lifecycle_marketing_segments",
+    {
+      description:
+        "Get readonly lifecycle marketing segment aggregates from the admin backend. Does not calculate segments inside MCP.",
+      inputSchema: inputSchema(lifecycleMarketingSegmentsQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_lifecycle_marketing_segments",
+        "/lifecycle-marketing/segments",
+        input,
+        lifecycleMarketingTools.getLifecycleMarketingSegments,
+      ),
+  );
+
+  server.registerTool(
+    "list_lifecycle_marketing_segment_users",
+    {
+      description:
+        "List readonly users in one lifecycle marketing segment with backend-provided reasons and pagination.",
+      inputSchema: inputSchema(lifecycleMarketingSegmentUsersQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "list_lifecycle_marketing_segment_users",
+        "/lifecycle-marketing/segments/{segmentId}/users",
+        input,
+        lifecycleMarketingTools.listLifecycleMarketingSegmentUsers,
       ),
   );
 
