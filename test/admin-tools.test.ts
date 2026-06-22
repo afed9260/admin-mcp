@@ -248,6 +248,17 @@ describe("readonly admin tools", () => {
       path: "/support-inbox/summary?from=2026-06-01&to=2026-06-03&sourceChannel=telegram_support_bot",
     });
 
+    await expect(
+      tools.getSupportQueueRisk({
+        limit: 25,
+        replySlaHours: 2,
+        waitingCustomerStaleHours: 48,
+        waitingInternalSlaHours: 12,
+      }),
+    ).resolves.toEqual({
+      path: "/support-inbox/queue-risk?limit=25&replySlaHours=2&waitingCustomerStaleHours=48&waitingInternalSlaHours=12",
+    });
+
     await expect(tools.getSupportWaitingItems()).resolves.toEqual({
       path: "/support-inbox/tickets?status=waiting_internal&page=1&limit=50",
     });

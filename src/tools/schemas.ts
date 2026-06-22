@@ -323,6 +323,15 @@ export const supportSummaryQuerySchema = z
   .strict()
   .refine(({ from, to }) => from <= to, { path: ["to"] });
 
+export const supportQueueRiskQuerySchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(100),
+    replySlaHours: z.number().positive().max(24 * 30).default(4),
+    waitingCustomerStaleHours: z.number().positive().max(24 * 30).default(72),
+    waitingInternalSlaHours: z.number().positive().max(24 * 30).default(24),
+  })
+  .strict();
+
 export const supportActionBatchSchema = z
   .object({
     ticketId: z.string().trim().min(1).max(120),
@@ -570,6 +579,7 @@ export type ReferralManualReviewList = z.infer<typeof referralManualReviewListSc
 export type ReferralManualReviewApprove = z.infer<typeof referralManualReviewApproveSchema>;
 export type ReferralManualReviewReject = z.infer<typeof referralManualReviewRejectSchema>;
 export type SupportSummaryQuery = z.infer<typeof supportSummaryQuerySchema>;
+export type SupportQueueRiskQuery = z.infer<typeof supportQueueRiskQuerySchema>;
 export type SupportActionBatch = z.infer<typeof supportActionBatchSchema>;
 export type NudgeCandidatesQuery = z.infer<typeof nudgeCandidatesQuerySchema>;
 export type NudgeHistoryQuery = z.infer<typeof nudgeHistoryQuerySchema>;

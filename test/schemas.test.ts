@@ -22,6 +22,7 @@ import {
   reactivationCampaignDryRunSchema,
   reactivationSendEligibilityQuerySchema,
   supportActionBatchSchema,
+  supportQueueRiskQuerySchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -387,6 +388,31 @@ describe("tool schemas", () => {
     expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", to: "bad" })).toThrow();
     expect(() => supportSummaryQuerySchema.parse({ from: "2026-06-01", sourceChannel: "email", to: "2026-06-03" }))
       .toThrow();
+  });
+
+  it("defaults and validates support queue risk thresholds", () => {
+    expect(supportQueueRiskQuerySchema.parse({})).toEqual({
+      limit: 100,
+      replySlaHours: 4,
+      waitingCustomerStaleHours: 72,
+      waitingInternalSlaHours: 24,
+    });
+    expect(
+      supportQueueRiskQuerySchema.parse({
+        limit: 25,
+        replySlaHours: 2,
+        waitingCustomerStaleHours: 48,
+        waitingInternalSlaHours: 12,
+      }),
+    ).toEqual({
+      limit: 25,
+      replySlaHours: 2,
+      waitingCustomerStaleHours: 48,
+      waitingInternalSlaHours: 12,
+    });
+    expect(() => supportQueueRiskQuerySchema.parse({ limit: 101 })).toThrow();
+    expect(() => supportQueueRiskQuerySchema.parse({ replySlaHours: 0 })).toThrow();
+    expect(() => supportQueueRiskQuerySchema.parse({ waitingInternalSlaHours: 24 * 31 })).toThrow();
   });
 
   it("validates support action batches", () => {

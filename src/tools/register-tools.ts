@@ -50,6 +50,7 @@ import {
   reactivationWave2SendSchema,
   reactivationWave2SourceReconciliationQuerySchema,
   supportActionBatchSchema,
+  supportQueueRiskQuerySchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -75,6 +76,7 @@ export const readonlyToolNames = [
   "list_support_tickets",
   "get_support_ticket",
   "get_support_summary",
+  "get_support_queue_risk",
   "get_support_waiting_items",
   "get_support_investigation",
   "get_customer_operations_profile",
@@ -444,6 +446,24 @@ function registerTools(
     },
     (input) =>
       runWithAudit(config, "get_support_summary", "/support-inbox/summary", input, supportTools.getSupportSummary),
+  );
+
+  server.registerTool(
+    "get_support_queue_risk",
+    {
+      description:
+        "Get readonly support queue risk summary for daily review: P1/P2 unresolved, stale replies, stale waiting-internal, stale waiting-customer.",
+      inputSchema: inputSchema(supportQueueRiskQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_support_queue_risk",
+        "/support-inbox/queue-risk",
+        input,
+        supportTools.getSupportQueueRisk,
+      ),
   );
 
   server.registerTool(
