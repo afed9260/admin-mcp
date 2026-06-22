@@ -2,6 +2,7 @@ import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
 import {
   supportActionBatchSchema,
+  supportQueueRiskQuerySchema,
   supportSummaryQuerySchema,
   supportTicketDetailSchema,
   supportTicketsQuerySchema,
@@ -22,6 +23,11 @@ export function createSupportTools(client: AdminApiClient) {
     async getSupportSummary(input: unknown) {
       const query = supportSummaryQuerySchema.parse(input);
       return client.get(`/support-inbox/summary?${toSearchParams(query)}`);
+    },
+
+    async getSupportQueueRisk(input: unknown) {
+      const query = supportQueueRiskQuerySchema.parse(input);
+      return client.get(`/support-inbox/queue-risk?${toSearchParams(query)}`);
     },
 
     async getSupportWaitingItems() {
