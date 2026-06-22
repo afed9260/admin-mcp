@@ -66,6 +66,7 @@ describe("readonlyToolNames", () => {
       "list_support_tickets",
       "get_support_ticket",
       "get_support_summary",
+      "get_support_queue_risk",
       "get_support_waiting_items",
       "get_support_investigation",
       "get_customer_operations_profile",
