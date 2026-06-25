@@ -18,6 +18,7 @@ import {
   broadRelaunchCompensationDryRunSchema,
   broadRelaunchCompensationSendSchema,
   broadRelaunchNotificationSendSchema,
+  customerBillingReconciliationQuerySchema,
   reactivationCampaignStateQuerySchema,
   reactivationCampaignDryRunSchema,
   reactivationSendEligibilityQuerySchema,
@@ -171,6 +172,24 @@ describe("tool schemas", () => {
         segmentId: "paid_inactive",
       }),
     ).toThrow();
+  });
+
+  it("validates customer billing reconciliation query", () => {
+    expect(
+      customerBillingReconciliationQuerySchema.parse({
+        originType: "support_ticket",
+        originId: "ticket-1",
+        telegramUserId: 437078503,
+      }),
+    ).toEqual({
+      originType: "support_ticket",
+      originId: "ticket-1",
+      telegramUserId: 437078503,
+      limit: 50,
+    });
+
+    expect(() => customerBillingReconciliationQuerySchema.parse({ limit: 201 })).toThrow();
+    expect(() => customerBillingReconciliationQuerySchema.parse({ originType: "telegram_support_ticket" })).toThrow();
   });
 
   it("validates broad relaunch campaign query and guarded send", () => {

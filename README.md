@@ -39,9 +39,11 @@ Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 - `list_support_tickets`
 - `get_support_ticket`
 - `get_support_summary`
+- `get_support_queue_risk`
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `get_customer_operations_profile`
+- `get_customer_billing_reconciliation`
 - `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`

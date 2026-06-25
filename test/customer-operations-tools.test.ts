@@ -25,6 +25,26 @@ describe("createCustomerOperationsTools", () => {
     );
   });
 
+  it("loads a readonly billing reconciliation report", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.getCustomerBillingReconciliation({
+      originType: "support_ticket",
+      originId: "ticket-1",
+      workspaceId: "workspace-1",
+      sdelkaUserId: "user-1",
+      telegramUserId: 437078503,
+      transactionId: "transaction-1",
+      limit: 25,
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.get).toHaveBeenCalledWith(
+      "/customer-operations/billing-reconciliation?workspaceId=workspace-1&sdelkaUserId=user-1&telegramUserId=437078503&originType=support_ticket&originId=ticket-1&transactionId=transaction-1&limit=25",
+    );
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
   it("dry-runs a customer dialog launch credit grant", async () => {
     const client = createClient();
     const tools = createCustomerOperationsTools(client);
