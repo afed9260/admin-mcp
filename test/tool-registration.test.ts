@@ -70,6 +70,7 @@ describe("readonlyToolNames", () => {
       "get_support_waiting_items",
       "get_support_investigation",
       "get_customer_operations_profile",
+      "get_customer_billing_reconciliation",
       "list_referral_manual_review_items",
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
@@ -203,6 +204,7 @@ describe("createAdminMcpServer", () => {
     const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
     const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
     expect(disabledToolNames).toContain("get_customer_operations_profile");
+    expect(disabledToolNames).toContain("get_customer_billing_reconciliation");
     expect(disabledToolNames).toContain("dry_run_customer_dialog_launch_credits");
     expect(disabledToolNames).toContain("dry_run_successful_dialog_debt_recovery");
     expect(disabledToolNames).toContain("list_referral_manual_review_items");

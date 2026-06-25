@@ -99,9 +99,11 @@ After Codex starts with the MCP server, verify that these tools are visible:
 - `list_support_tickets`
 - `get_support_ticket`
 - `get_support_summary`
+- `get_support_queue_risk`
 - `get_support_waiting_items`
 - `get_support_investigation`
 - `get_customer_operations_profile`
+- `get_customer_billing_reconciliation`
 - `list_referral_manual_review_items`
 - `list_reactivation_campaign_runs`
 - `list_reactivation_campaign_audience`
@@ -147,6 +149,7 @@ list_reactivation_campaign_runs with limit=5
 list_reactivation_campaign_audience with segment=paid_avito_no_dialogs and limit=20
 get_reactivation_campaign_state with segment=paid_avito_no_dialogs and limit=20
 get_customer_operations_profile with telegramUserId=437078503
+get_customer_billing_reconciliation with telegramUserId=437078503 and limit=50
 dry_run_customer_dialog_launch_credits with telegramUserId=437078503, expectedTelegramUserId=437078503, idempotencyKey=support-ticket-smoke-dialog-credit, reason=smoke test dry run, slots=10
 dry_run_reactivation_dialog_credits with audienceSegment=paid_avito_no_dialogs
 ```

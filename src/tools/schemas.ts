@@ -258,6 +258,13 @@ export const customerOperationsProfileQuerySchema = z
   })
   .strict();
 
+export const customerBillingReconciliationQuerySchema = customerOperationsProfileQuerySchema
+  .extend({
+    transactionId: optionalText(120),
+    limit: z.number().int().min(1).max(200).default(50),
+  })
+  .strict();
+
 export const customerDialogLaunchCreditDryRunSchema = customerOperationsProfileQuerySchema
   .extend({
     expectedWorkspaceId: optionalText(120),
@@ -572,6 +579,7 @@ export type DialogDetailQuery = z.infer<typeof dialogDetailQuerySchema>;
 export type SupportTicketsQuery = z.infer<typeof supportTicketsQuerySchema>;
 export type SupportTicketDetail = z.infer<typeof supportTicketDetailSchema>;
 export type CustomerOperationsProfileQuery = z.infer<typeof customerOperationsProfileQuerySchema>;
+export type CustomerBillingReconciliationQuery = z.infer<typeof customerBillingReconciliationQuerySchema>;
 export type CustomerDialogLaunchCreditDryRun = z.infer<typeof customerDialogLaunchCreditDryRunSchema>;
 export type CustomerDialogLaunchCreditApply = z.infer<typeof customerDialogLaunchCreditApplySchema>;
 export type SuccessfulDialogDebtRecoveryDryRun = z.infer<typeof successfulDialogDebtRecoveryDryRunSchema>;

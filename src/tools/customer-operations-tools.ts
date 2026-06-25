@@ -1,6 +1,7 @@
 import { AdminApiClient } from "../backend/admin-api-client.js";
 import { toSearchParams } from "../backend/search-params.js";
 import {
+  customerBillingReconciliationQuerySchema,
   customerDialogLaunchCreditApplySchema,
   customerDialogLaunchCreditDryRunSchema,
   customerOperationsProfileQuerySchema,
@@ -16,6 +17,11 @@ export function createCustomerOperationsTools(client: AdminApiClient) {
     getCustomerOperationsProfile(input: unknown) {
       const query = customerOperationsProfileQuerySchema.parse(input);
       return client.get(`/customer-operations/profile?${toSearchParams(query)}`);
+    },
+
+    getCustomerBillingReconciliation(input: unknown) {
+      const query = customerBillingReconciliationQuerySchema.parse(input);
+      return client.get(`/customer-operations/billing-reconciliation?${toSearchParams(query)}`);
     },
 
     dryRunCustomerDialogLaunchCredits(input: unknown) {

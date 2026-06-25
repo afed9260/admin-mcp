@@ -18,6 +18,7 @@ import {
   botFunnelCustomersQuerySchema,
   botFunnelQuerySchema,
   costQuerySchema,
+  customerBillingReconciliationQuerySchema,
   customerDialogLaunchCreditApplySchema,
   customerDialogLaunchCreditDryRunSchema,
   customerOperationsProfileQuerySchema,
@@ -80,6 +81,7 @@ export const readonlyToolNames = [
   "get_support_waiting_items",
   "get_support_investigation",
   "get_customer_operations_profile",
+  "get_customer_billing_reconciliation",
   "list_referral_manual_review_items",
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
@@ -515,6 +517,24 @@ function registerTools(
         "/customer-operations/profile",
         input,
         customerOperationsTools.getCustomerOperationsProfile,
+      ),
+  );
+
+  server.registerTool(
+    "get_customer_billing_reconciliation",
+    {
+      description:
+        "Get readonly Customer Operations billing reconciliation report for support refund, balance, package, dialog, and meeting checks.",
+      inputSchema: inputSchema(customerBillingReconciliationQuerySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "get_customer_billing_reconciliation",
+        "/customer-operations/billing-reconciliation",
+        input,
+        customerOperationsTools.getCustomerBillingReconciliation,
       ),
   );
 
