@@ -86,6 +86,7 @@ const supportActionSchema = z.union([
       type: z.literal("set_waiting_internal"),
       reason: supportWaitingInternalReason,
       message: optionalText(2000),
+      nextUpdateAt: isoDateTime.optional(),
     })
     .strict(),
   z.object({ type: z.literal("send_reply"), text: z.string().trim().min(1).max(5000) }).strict(),

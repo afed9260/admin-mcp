@@ -460,7 +460,12 @@ describe("tool schemas", () => {
         { type: "add_internal_note", note: "Investigated billing mismatch" },
         { type: "update_priority", priority: "P2" },
         { type: "update_category", category: "billing_or_payment_issue" },
-        { type: "set_waiting_internal", reason: "billing", message: "Please check invoice 42" },
+        {
+          type: "set_waiting_internal",
+          reason: "billing",
+          message: "Please check invoice 42",
+          nextUpdateAt: "2026-06-23T09:00:00.000Z",
+        },
         { type: "send_reply", text: "Exact reply text" },
         { type: "send_reply", textBase64: Buffer.from("Точный ответ клиенту", "utf8").toString("base64") },
         { type: "set_waiting_customer", message: "Waiting for customer confirmation" },
@@ -471,6 +476,12 @@ describe("tool schemas", () => {
 
     expect(parsed.ticketId).toBe("ticket/1");
     expect(parsed.actions).toHaveLength(10);
+    expect(parsed.actions).toContainEqual({
+      type: "set_waiting_internal",
+      reason: "billing",
+      message: "Please check invoice 42",
+      nextUpdateAt: "2026-06-23T09:00:00.000Z",
+    });
   });
 
   it("rejects unsafe support action batches", () => {
@@ -525,6 +536,13 @@ describe("tool schemas", () => {
     ).toThrow();
     expect(() =>
       supportActionBatchSchema.parse({ ...base, confirm: true, actions: [{ type: "refund_customer" }] }),
+    ).toThrow();
+    expect(() =>
+      supportActionBatchSchema.parse({
+        ...base,
+        confirm: true,
+        actions: [{ type: "set_waiting_internal", reason: "developer", nextUpdateAt: "tomorrow" }],
+      }),
     ).toThrow();
   });
 });
