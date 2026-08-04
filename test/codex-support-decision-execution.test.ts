@@ -45,15 +45,57 @@ describe("runCodexSupportDecision", () => {
     expect(input.args).toEqual(expect.arrayContaining([
       "--disable", "shell_tool",
       "--disable", "web_search_request",
+      "--config", "mcp_servers.support-autopilot.default_tools_approval_mode=\"approve\"",
       "--ephemeral",
       "--json",
       "--cd", "C:\\Synthetic\\runtime",
       "-",
     ]));
+    expect(input.args.indexOf("--config")).toBeLessThan(input.args.indexOf("exec"));
     expect(input.environment).toEqual({ CODEX_HOME: "C:\\Synthetic\\codex-home" });
     expect(input.stdin).toContain("support-synthetic.1");
+    expect(input.stdin).toContain("top-level arguments");
+    expect(input.stdin).toContain("never nest them under a decision object");
     expect(input.stdin).not.toMatch(/ticket|leaseToken|proposedReply/i);
     expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
+  });
+
+  it("accepts at most two failed calls when Codex recovers and submits exactly one decision", async () => {
+    const processRunner = runner([
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision"),
+      "",
+    ].join("\n"));
+
+    await expect(runCodexSupportDecision({
+      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
+      codexExecutablePath: "C:\\Tools\\codex.exe",
+      processTimeoutMs: 120_000,
+      runtimeDir: "C:\\Synthetic\\runtime",
+      workerId: "support-synthetic.1",
+    }, processRunner)).resolves.toMatchObject({
+      failedToolCalls: 1,
+      successfulDecisionSubmissions: 1,
+      toolCalls: 2,
+    });
+  });
+
+  it("rejects more than two recovered tool failures", async () => {
+    const processRunner = runner([
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision"),
+      "",
+    ].join("\n"));
+
+    await expect(runCodexSupportDecision({
+      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
+      codexExecutablePath: "C:\\Tools\\codex.exe",
+      processTimeoutMs: 120_000,
+      runtimeDir: "C:\\Synthetic\\runtime",
+      workerId: "support-synthetic.1",
+    }, processRunner)).rejects.toThrow();
   });
 
   it.each([

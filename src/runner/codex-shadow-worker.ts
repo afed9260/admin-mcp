@@ -7,7 +7,12 @@ import type { SupportAutopilotShadowRunnerConfig } from "./support-autopilot-sha
 type EnabledConfig = Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }>;
 
 export type CodexShadowWorkerEvent =
-  | { durationMs: number; eventCode: "codex_shadow_run_completed"; toolCallCount: number }
+  | {
+    durationMs: number;
+    eventCode: "codex_shadow_run_completed";
+    failedToolCallCount: number;
+    toolCallCount: number;
+  }
   | { durationMs: number; eventCode: "codex_shadow_run_failed"; failureCode: "CODEX_RUN_INVALID" };
 
 export class CodexShadowWorker {
@@ -18,7 +23,7 @@ export class CodexShadowWorker {
   ) {}
 
   async runOne(): Promise<{
-    failedToolCalls: 0;
+    failedToolCalls: number;
     successfulDecisionSubmissions: 1;
     toolCalls: number;
   }> {
@@ -34,10 +39,11 @@ export class CodexShadowWorker {
       this.log({
         durationMs: Math.round(performance.now() - startedAt),
         eventCode: "codex_shadow_run_completed",
+        failedToolCallCount: summary.failedToolCalls,
         toolCallCount: summary.toolCalls,
       });
       return {
-        failedToolCalls: 0,
+        failedToolCalls: summary.failedToolCalls,
         successfulDecisionSubmissions: 1,
         toolCalls: summary.toolCalls,
       };

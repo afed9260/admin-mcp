@@ -14,6 +14,19 @@ function decisionEvent(status = "completed", error: unknown = null) {
   });
 }
 
+function startedDecisionEvent() {
+  return JSON.stringify({
+    item: {
+      error: null,
+      server: "support-autopilot",
+      status: "in_progress",
+      tool: "submit_support_automation_decision",
+      type: "mcp_tool_call",
+    },
+    type: "item.started",
+  });
+}
+
 describe("CodexJsonlObserver", () => {
   it("handles fragmented lines and returns counters only", () => {
     const observer = new CodexJsonlObserver();
@@ -26,6 +39,18 @@ describe("CodexJsonlObserver", () => {
       successfulDecisionSubmissions: 1,
       toolCalls: 1,
       totalLines: 1,
+    });
+  });
+
+  it("counts only terminal MCP events when Codex emits started and completed pairs", () => {
+    const observer = new CodexJsonlObserver();
+    observer.push(Buffer.from(`${startedDecisionEvent()}\n${decisionEvent()}\n`));
+
+    expect(observer.finish()).toEqual({
+      failedToolCalls: 0,
+      successfulDecisionSubmissions: 1,
+      toolCalls: 1,
+      totalLines: 2,
     });
   });
 

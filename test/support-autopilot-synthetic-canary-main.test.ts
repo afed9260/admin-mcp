@@ -88,6 +88,29 @@ describe("runSupportAutopilotSyntheticCanary", () => {
     );
   });
 
+  it("surfaces a bounded recovered tool failure in the redacted success summary", async () => {
+    const result = await runSupportAutopilotSyntheticCanary({}, {
+      clock: vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(20),
+      execute: vi.fn().mockResolvedValue({
+        failedToolCalls: 1,
+        successfulDecisionSubmissions: 1,
+        toolCalls: 5,
+        totalLines: 12,
+      }),
+      loadConfig: () => config,
+      preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+      processRunner: unusedProcessRunner,
+    });
+
+    expect(result).toEqual({
+      durationMs: 10,
+      failedToolCalls: 1,
+      outcome: "passed",
+      successfulDecisionSubmissions: 1,
+      toolCalls: 5,
+    });
+  });
+
   it.each([
     ["configuration", { loadConfig: () => { throw new Error("raw config"); } }],
     ["preflight", {

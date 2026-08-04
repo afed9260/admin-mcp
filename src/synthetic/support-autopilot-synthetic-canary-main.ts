@@ -23,7 +23,7 @@ export type SupportAutopilotSyntheticCanaryResult =
   | { outcome: "disabled" }
   | {
     durationMs: number;
-    failedToolCalls: 0;
+    failedToolCalls: number;
     outcome: "passed";
     successfulDecisionSubmissions: 1;
     toolCalls: number;
@@ -73,7 +73,7 @@ export async function runSupportAutopilotSyntheticCanary(
 
     return {
       durationMs,
-      failedToolCalls: 0,
+      failedToolCalls: summary.failedToolCalls,
       outcome: "passed",
       successfulDecisionSubmissions: 1,
       toolCalls: summary.toolCalls,

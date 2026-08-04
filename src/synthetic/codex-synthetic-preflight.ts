@@ -1,6 +1,10 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { CodexProcessRunner, CodexProcessResult } from "../runner/codex-process-runner.js";
+import {
+  readSingleCodexCommandOutput,
+  type CodexProcessRunner,
+  type CodexProcessResult,
+} from "../runner/codex-process-runner.js";
 import type { SupportAutopilotSyntheticCanaryConfig } from "./support-autopilot-synthetic-canary.config.js";
 
 type EnabledConfig = Extract<SupportAutopilotSyntheticCanaryConfig, { enabled: true }>;
@@ -45,21 +49,21 @@ export class CodexSyntheticPreflight {
 
   private async assertVersion(): Promise<void> {
     const result = await this.runCommand(["--version"], 64 * 1024);
-    if (!/^codex-cli \d+\.\d+\.\d+(?:[-+][^\r\n]+)?$/.test(this.singleOutput(result))) {
+    if (!/^codex-cli \d+\.\d+\.\d+(?:[-+][^\r\n]+)?$/.test(readSingleCodexCommandOutput(result))) {
       throw new Error("invalid version");
     }
   }
 
   private async assertChatGptLogin(): Promise<void> {
     const result = await this.runCommand(["login", "status"], 64 * 1024);
-    if (this.singleOutput(result) !== "Logged in using ChatGPT") {
+    if (readSingleCodexCommandOutput(result) !== "Logged in using ChatGPT") {
       throw new Error("invalid auth");
     }
   }
 
   private async assertMcpAllowlist(): Promise<void> {
     const result = await this.runCommand(["mcp", "list", "--json"], 256 * 1024);
-    const parsed: unknown = JSON.parse(this.singleOutput(result));
+    const parsed: unknown = JSON.parse(readSingleCodexCommandOutput(result));
     if (!Array.isArray(parsed) || parsed.length !== 1 || !this.isRecord(parsed[0])) {
       throw new Error("invalid MCP allowlist");
     }
@@ -95,15 +99,6 @@ export class CodexSyntheticPreflight {
       throw new Error("Codex command failed");
     }
     return result;
-  }
-
-  private singleOutput(result: CodexProcessResult): string {
-    const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
-    if ((stdout && stderr) || (!stdout && !stderr)) {
-      throw new Error("ambiguous Codex output");
-    }
-    return stdout || stderr;
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

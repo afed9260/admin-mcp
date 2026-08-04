@@ -58,6 +58,26 @@ describe("CodexShadowWorker", () => {
     expect(JSON.stringify(events)).not.toMatch(/stdout|stderr|prompt|ticket|message|lease|reply/i);
   });
 
+  it("reports a bounded recovered tool failure without relabeling the recorded decision as failed", async () => {
+    const processRunner = runner([
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision"),
+      "",
+    ].join("\n"));
+    const events: CodexShadowWorkerEvent[] = [];
+    const worker = new CodexShadowWorker(config, processRunner, (event) => events.push(event));
+
+    await expect(worker.runOne()).resolves.toEqual({
+      failedToolCalls: 1,
+      successfulDecisionSubmissions: 1,
+      toolCalls: 2,
+    });
+    expect(events).toContainEqual(expect.objectContaining({
+      eventCode: "codex_shadow_run_completed",
+      failedToolCallCount: 1,
+    }));
+  });
+
   it.each([
     ["missing decision", `${toolEvent("claim_support_automation_job")}\n`, {}],
     ["two decisions", `${toolEvent("submit_support_automation_decision")}\n${toolEvent("submit_support_automation_decision")}\n`, {}],

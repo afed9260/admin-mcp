@@ -206,7 +206,11 @@ export function registerSupportAutopilotTools(
   server.registerTool(
     "submit_support_automation_decision",
     {
-      description: "Record one structured shadow decision without customer or ticket mutation.",
+      description: [
+        "Record one structured shadow decision without customer or ticket mutation.",
+        "Pass exactly these top-level fields: workerId, jobId, leaseToken, decisionType, evidenceFactKeys, expectedLatestMessageId, expectedTicketVersion, internalReasoning, proposedReply, selectedPolicyId.",
+        "Do not add a decision object or aliases.",
+      ].join(" "),
       inputSchema: decisionInputSchema,
       annotations: queueMutationAnnotations,
     },

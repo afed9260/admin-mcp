@@ -151,6 +151,21 @@ describe("CodexShadowPreflight", () => {
     );
   });
 
+  it("accepts the exact ChatGPT login status when Codex writes it to stderr", async () => {
+    const runner = createRunner({
+      "login status": {
+        exitCode: 0,
+        stderr: "Logged in using ChatGPT\n",
+        stdout: "",
+        timedOut: false,
+      },
+    });
+
+    await expect(new CodexShadowPreflight(config, runner).run(
+      new Date("2026-08-04T09:00:00.000Z"),
+    )).resolves.toEqual({ outcome: "ready" });
+  });
+
   it("rejects extra MCP servers", async () => {
     const runner = createRunner({
       "mcp list --json": {

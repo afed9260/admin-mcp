@@ -21,6 +21,15 @@ export interface CodexProcessRunner {
   run(input: CodexProcessInput): Promise<CodexProcessResult>;
 }
 
+export function readSingleCodexCommandOutput(result: CodexProcessResult): string {
+  const stdout = result.stdout.trim();
+  const stderr = result.stderr.trim();
+  if ((stdout && stderr) || (!stdout && !stderr)) {
+    throw new Error("CODEX_COMMAND_OUTPUT_INVALID");
+  }
+  return stdout || stderr;
+}
+
 export class SpawnCodexProcessRunner implements CodexProcessRunner {
   run(input: CodexProcessInput): Promise<CodexProcessResult> {
     return new Promise((resolve, reject) => {
