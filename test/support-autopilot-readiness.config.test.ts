@@ -73,6 +73,23 @@ describe("loadSupportAutopilotReadinessConfig", () => {
     ]));
   });
 
+  it("rejects shared runner directories and state files", () => {
+    const result = loadSupportAutopilotReadinessConfig({
+      ...environment,
+      SUPPORT_AUTOPILOT_CODEX_HOME: "C:\\SupportAutopilot\\shared",
+      SUPPORT_AUTOPILOT_RUNTIME_DIR: "C:\\SupportAutopilot\\shared",
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: "C:\\SupportSecrets\\shared-state",
+      SUPPORT_AUTOPILOT_PRIVACY_ATTESTATION_PATH: "C:\\SupportSecrets\\shared-state",
+    }, "C:\\repo");
+
+    expect(result.configurationBlockers).toEqual(expect.arrayContaining([
+      "codex_home_not_isolated",
+      "credential_blob_not_isolated",
+      "privacy_attestation_not_isolated",
+      "runtime_not_isolated",
+    ]));
+  });
+
   it.each([
     ["SUPPORT_AUTOPILOT_SERVICE_TOKEN", "service-secret"],
     ["ADMIN_API_TOKEN", "admin-secret"],

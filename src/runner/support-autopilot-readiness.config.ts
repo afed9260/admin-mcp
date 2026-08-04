@@ -86,6 +86,9 @@ export function loadSupportAutopilotReadinessConfig(
   if (runtimeDir && isWithin(runtimeDir, repositoryRoot)) {
     blockers.push("runtime_not_isolated");
   }
+  if (codexHome && runtimeDir && sameWindowsPath(codexHome, runtimeDir)) {
+    blockers.push("codex_home_not_isolated", "runtime_not_isolated");
+  }
   if (credentialBlobPath && [runtimeDir, codexHome, repositoryRoot]
     .filter((value): value is string => value !== undefined)
     .some((parent) => isWithin(credentialBlobPath, parent))) {
@@ -95,6 +98,13 @@ export function loadSupportAutopilotReadinessConfig(
     .filter((value): value is string => value !== undefined)
     .some((parent) => isWithin(privacyAttestationPath, parent))) {
     blockers.push("privacy_attestation_not_isolated");
+  }
+  if (
+    credentialBlobPath
+    && privacyAttestationPath
+    && sameWindowsPath(credentialBlobPath, privacyAttestationPath)
+  ) {
+    blockers.push("credential_blob_not_isolated", "privacy_attestation_not_isolated");
   }
 
   return {
@@ -184,4 +194,8 @@ function diagnosticTimeout(environment: Environment, blockers: string[]): number
 function isWithin(candidate: string, parent: string): boolean {
   const relative = path.win32.relative(parent, candidate);
   return relative === "" || (!relative.startsWith("..\\") && relative !== "..");
+}
+
+function sameWindowsPath(left: string, right: string): boolean {
+  return path.win32.normalize(left).toLowerCase() === path.win32.normalize(right).toLowerCase();
 }
