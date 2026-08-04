@@ -1,0 +1,64 @@
+import { describe, expect, it } from "vitest";
+import {
+  assertChatGptLoginOutput,
+  assertCodexVersionOutput,
+  assertSupportAutopilotMcpProfile,
+} from "../src/runner/codex-profile-validation.js";
+
+const expected = {
+  mcpEntryPath: "C:\\ServiceApp\\dist\\runner\\support-autopilot-mcp-launcher.js",
+  nodeExecutablePath: "C:\\Program Files\\nodejs\\node.exe",
+};
+
+function profile(transportOverrides: Record<string, unknown> = {}) {
+  return JSON.stringify([{
+    enabled: true,
+    name: "support-autopilot",
+    transport: {
+      args: [expected.mcpEntryPath],
+      command: expected.nodeExecutablePath,
+      cwd: null,
+      env: null,
+      env_vars: [],
+      type: "stdio",
+      ...transportOverrides,
+    },
+  }]);
+}
+
+describe("Codex profile validation", () => {
+  it("accepts the reviewed standalone version, ChatGPT login, and exact MCP profile", () => {
+    expect(() => assertCodexVersionOutput("codex-cli 0.146.0")).not.toThrow();
+    expect(() => assertChatGptLoginOutput("Logged in using ChatGPT")).not.toThrow();
+    expect(() => assertSupportAutopilotMcpProfile(profile(), expected)).not.toThrow();
+  });
+
+  it.each([
+    "Codex 0.146.0",
+    "codex-cli unknown",
+    "codex-cli 0.146.0\nextra",
+  ])("rejects malformed version output", (value) => {
+    expect(() => assertCodexVersionOutput(value)).toThrow("CODEX_VERSION_INVALID");
+  });
+
+  it.each([
+    "Logged in using an API key",
+    "Logged in using ChatGPT\nextra",
+    "",
+  ])("rejects non-ChatGPT login output", (value) => {
+    expect(() => assertChatGptLoginOutput(value)).toThrow("CODEX_LOGIN_INVALID");
+  });
+
+  it.each([
+    ["extra server", () => JSON.stringify([...JSON.parse(profile()), ...JSON.parse(profile())])],
+    ["wrong command", () => profile({ command: "C:\\Other\\node.exe" })],
+    ["wrong entry", () => profile({ args: ["C:\\Other\\launcher.js"] })],
+    ["working directory", () => profile({ cwd: "C:\\ServiceApp" })],
+    ["configured environment", () => profile({ env: { TOKEN: "hidden" } })],
+    ["configured environment variables", () => profile({ env_vars: ["PATH"] })],
+    ["malformed JSON", () => "not-json"],
+  ])("rejects MCP profile with %s", (_name, build) => {
+    expect(() => assertSupportAutopilotMcpProfile(build(), expected))
+      .toThrow("CODEX_MCP_PROFILE_INVALID");
+  });
+});

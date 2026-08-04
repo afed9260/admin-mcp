@@ -69,6 +69,27 @@ ADMIN_API_BASE_URL=<credential-free-https-url>
 
 Build with `npm run build`. `npm run support-autopilot:shadow` starts the foreground process only when the exact enable value is `true`.
 
+## Local Readiness Doctor
+
+Build and run the foreground doctor before configuring or starting production shadow:
+
+```powershell
+corepack pnpm build
+corepack pnpm support-autopilot:readiness
+```
+
+The doctor reuses the local runner path and attestation variables listed above, plus `SUPPORT_AUTOPILOT_PROCESS_TIMEOUT_MS`. It does not require the shadow enable flag, worker id, daily budget, budget state, or Admin API URL.
+
+The command checks the standalone Codex CLI, ChatGPT login, exact `support-autopilot` MCP profile, isolated empty runtime, DPAPI credential-blob presence, and privacy attestation. It never decrypts or reads the credential blob, contacts the Admin backend, performs the credential-backed health smoke, starts the runner, polls the queue, or handles customer data.
+
+Output is one redacted JSON object. It contains only `outcome`, six stable `checks`, and sorted stable `blockers`; it never contains paths, command output, file contents, raw errors, tokens, URLs, ticket data, or customer data. Example while the local profile is valid but credential and attestation files are absent:
+
+```json
+{"blockers":["credential_blob_unavailable","privacy_attestation_unavailable"],"checks":[{"id":"codex_cli","status":"ready"},{"id":"codex_login","status":"ready"},{"id":"mcp_profile","status":"ready"},{"id":"runtime","status":"ready"},{"id":"credential_blob","status":"blocked"},{"id":"privacy_attestation","status":"blocked"}],"outcome":"blocked"}
+```
+
+Exit code `0` means locally ready, `2` means expected blockers remain, and `1` means an unexpected bounded diagnostic failure. A `ready` doctor report is advisory and never replaces the production preflight or authorizes credentials, privacy approval, queue access, or customer delivery. If `SUPPORT_AUTOPILOT_SERVICE_TOKEN` or `ADMIN_API_TOKEN` is present, the doctor reports `plaintext_token_present` and does not invoke Codex.
+
 ## Preflight
 
 Before polling, the runner verifies:

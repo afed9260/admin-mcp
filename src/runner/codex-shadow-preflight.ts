@@ -1,9 +1,14 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import path from "node:path";
 import {
   readSingleCodexCommandOutput,
   type CodexProcessRunner,
 } from "./codex-process-runner.js";
+import {
+  assertChatGptLoginOutput,
+  assertCodexVersionOutput,
+  assertSupportAutopilotMcpProfile,
+} from "./codex-profile-validation.js";
+import { assertSupportPrivacyAttestation } from "./support-privacy-attestation.js";
 import type { SupportAutopilotShadowRunnerConfig } from "./support-autopilot-shadow-runner.config.js";
 
 type EnabledConfig = Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }>;
@@ -77,80 +82,28 @@ export class CodexShadowPreflight {
 
   private async assertPrivacyAttestation(now: Date): Promise<void> {
     const raw = await readFile(this.config.privacyAttestationPath, "utf8");
-    const value: unknown = JSON.parse(raw);
-    if (!this.isRecord(value)) {
-      throw new Error("invalid attestation");
-    }
-    const keys = Object.keys(value).sort();
-    const expected = [
-      "attestationId",
-      "dataControlsApproved",
-      "expiresAt",
-      "modelTrainingDisabled",
-      "privacyGateApproved",
-      "workspaceType",
-    ].sort();
-    const expiry = typeof value.expiresAt === "string" ? new Date(value.expiresAt) : null;
-    const workspace = value.workspaceType;
-    const workspaceApproved = workspace === "business"
-      || workspace === "enterprise"
-      || workspace === "edu"
-      || ((workspace === "plus" || workspace === "pro") && value.modelTrainingDisabled === true);
-    if (
-      keys.length !== expected.length
-      || !keys.every((key, index) => key === expected[index])
-      || value.attestationId !== this.config.privacyAttestationId
-      || value.expiresAt !== this.config.privacyAttestationExpiresAt
-      || !expiry
-      || Number.isNaN(expiry.getTime())
-      || expiry.toISOString() !== value.expiresAt
-      || expiry.getTime() <= now.getTime()
-      || value.dataControlsApproved !== true
-      || value.privacyGateApproved !== true
-      || typeof value.modelTrainingDisabled !== "boolean"
-      || !workspaceApproved
-    ) {
-      throw new Error("invalid attestation");
-    }
+    assertSupportPrivacyAttestation(raw, {
+      attestationId: this.config.privacyAttestationId,
+      expiresAt: this.config.privacyAttestationExpiresAt,
+    }, now);
   }
 
   private async assertVersion(): Promise<void> {
     const result = await this.runCommand(["--version"], 64 * 1024);
-    if (!/^codex-cli \d+\.\d+\.\d+(?:[-+][^\r\n]+)?$/.test(readSingleCodexCommandOutput(result))) {
-      throw new Error("invalid version");
-    }
+    assertCodexVersionOutput(readSingleCodexCommandOutput(result));
   }
 
   private async assertChatGptLogin(): Promise<void> {
     const result = await this.runCommand(["login", "status"], 64 * 1024);
-    if (readSingleCodexCommandOutput(result) !== "Logged in using ChatGPT") {
-      throw new Error("invalid auth");
-    }
+    assertChatGptLoginOutput(readSingleCodexCommandOutput(result));
   }
 
   private async assertMcpAllowlist(): Promise<void> {
     const result = await this.runCommand(["mcp", "list", "--json"], 256 * 1024);
-    const parsed: unknown = JSON.parse(readSingleCodexCommandOutput(result));
-    if (!Array.isArray(parsed) || parsed.length !== 1 || !this.isRecord(parsed[0])) {
-      throw new Error("invalid mcp allowlist");
-    }
-    const server = parsed[0];
-    const transport = server.transport;
-    if (
-      server.name !== "support-autopilot"
-      || server.enabled !== true
-      || !this.isRecord(transport)
-      || transport.type !== "stdio"
-      || !this.sameWindowsPath(transport.command, this.config.nodeExecutablePath)
-      || !Array.isArray(transport.args)
-      || transport.args.length !== 1
-      || !this.sameWindowsPath(transport.args[0], this.config.mcpLauncherPath)
-      || !(transport.cwd === null || transport.cwd === undefined)
-      || !(transport.env === null || (this.isRecord(transport.env) && Object.keys(transport.env).length === 0))
-      || !(transport.env_vars === undefined || (Array.isArray(transport.env_vars) && transport.env_vars.length === 0))
-    ) {
-      throw new Error("invalid mcp allowlist");
-    }
+    assertSupportAutopilotMcpProfile(readSingleCodexCommandOutput(result), {
+      mcpEntryPath: this.config.mcpLauncherPath,
+      nodeExecutablePath: this.config.nodeExecutablePath,
+    });
   }
 
   private async assertSmoke(): Promise<void> {
@@ -205,10 +158,6 @@ export class CodexShadowPreflight {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
-  private sameWindowsPath(value: unknown, expected: string): boolean {
-    return typeof value === "string"
-      && path.win32.normalize(value).toLowerCase() === path.win32.normalize(expected).toLowerCase();
-  }
 }
 
 export function createCodexChildEnvironment(config: EnabledConfig): NodeJS.ProcessEnv {
