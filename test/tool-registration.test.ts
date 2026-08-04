@@ -15,6 +15,7 @@ import {
   safeAutomationToolNames,
   writeToolNames,
 } from "../src/tools/register-tools.js";
+import { supportAutopilotToolNames } from "../src/tools/support-autopilot-tools.js";
 
 const config: AdminMcpConfig = {
   adminApiBaseUrl: "https://malikbot.ru/new-admin",
@@ -164,7 +165,7 @@ describe("createAdminMcpServer", () => {
       .toEqual(readonlyToolNames);
   });
 
-  it("exposes no general tools for the support autopilot profile before lease APIs exist", async () => {
+  it("exposes only restricted queue tools for the support autopilot profile", async () => {
     const client = await connect(createAdminMcpServer({
       ...config,
       adminApiToken: "dedicated-support-token",
@@ -172,7 +173,7 @@ describe("createAdminMcpServer", () => {
     }));
 
     const toolNames = (await client.listTools()).tools.map((tool) => tool.name);
-    expect(toolNames).toEqual([]);
+    expect(toolNames).toEqual(supportAutopilotToolNames);
     expect(toolNames).not.toEqual(expect.arrayContaining([
       ...readonlyToolNames,
       ...safeAutomationToolNames,
