@@ -184,7 +184,7 @@ export class CodexShadowPreflight {
     const result = await this.processRunner.run({
       args,
       cwd: this.config.runtimeDir,
-      environment: this.childEnvironment(),
+      environment: createCodexChildEnvironment(this.config),
       executablePath: this.config.codexExecutablePath,
       maxOutputBytes: maximumBytes,
       stdin,
@@ -196,25 +196,25 @@ export class CodexShadowPreflight {
     return result;
   }
 
-  private childEnvironment(): NodeJS.ProcessEnv {
-    return {
-      ADMIN_API_BASE_URL: this.config.adminApiBaseUrl,
-      APPDATA: process.env.APPDATA,
-      CODEX_HOME: this.config.codexHome,
-      ComSpec: process.env.ComSpec,
-      LOCALAPPDATA: process.env.LOCALAPPDATA,
-      PATH: process.env.PATH,
-      PATHEXT: process.env.PATHEXT,
-      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: this.config.credentialBlobPath,
-      SystemRoot: process.env.SystemRoot,
-      TEMP: process.env.TEMP,
-      TMP: process.env.TMP,
-      USERPROFILE: process.env.USERPROFILE,
-      WINDIR: process.env.WINDIR,
-    };
-  }
-
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
+}
+
+export function createCodexChildEnvironment(config: EnabledConfig): NodeJS.ProcessEnv {
+  return {
+    ADMIN_API_BASE_URL: config.adminApiBaseUrl,
+    APPDATA: process.env.APPDATA,
+    CODEX_HOME: config.codexHome,
+    ComSpec: process.env.ComSpec,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    PATH: process.env.PATH,
+    PATHEXT: process.env.PATHEXT,
+    SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: config.credentialBlobPath,
+    SystemRoot: process.env.SystemRoot,
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
+    USERPROFILE: process.env.USERPROFILE,
+    WINDIR: process.env.WINDIR,
+  };
 }
