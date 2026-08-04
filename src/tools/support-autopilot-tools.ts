@@ -1,7 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { SupportAutopilotApiClient } from "../backend/support-autopilot-api-client.js";
+
+export interface SupportAutopilotClient {
+  get<T>(path: string): Promise<T>;
+  post<T>(path: string, body: unknown): Promise<T>;
+}
 
 export const supportAutopilotToolNames = [
   "get_support_automation_work_availability",
@@ -114,7 +118,7 @@ function toolResponse(data: unknown) {
 
 export function registerSupportAutopilotTools(
   server: McpServer,
-  client: SupportAutopilotApiClient,
+  client: SupportAutopilotClient,
 ): void {
   server.registerTool(
     "get_support_automation_work_availability",
