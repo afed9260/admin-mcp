@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Environment = Record<string, string | undefined>;
 
@@ -27,7 +28,7 @@ const ATTESTATION_ID_PATTERN = /^[a-z0-9](?:[a-z0-9._:-]{1,126}[a-z0-9])$/;
 
 export function loadSupportAutopilotShadowRunnerConfig(
   environment: Environment = process.env,
-  repositoryRoot = process.cwd(),
+  repositoryRoot = fileURLToPath(new URL("../../", import.meta.url)),
 ): SupportAutopilotShadowRunnerConfig {
   if (environment.SUPPORT_AUTOPILOT_SHADOW_RUNNER_ENABLED !== "true") {
     return { enabled: false };
@@ -86,6 +87,24 @@ export function loadSupportAutopilotShadowRunnerConfig(
     if (isWithin(credentialBlobPath, forbiddenParent)) {
       throw new Error("Credential blob must be outside repositories and runtime directories");
     }
+  }
+  if (isWithin(runtimeDir, repositoryRoot) || isWithin(codexHome, repositoryRoot)) {
+    throw new Error("CODEX_HOME and runtime must be outside the repository");
+  }
+  if (
+    isWithin(budgetStatePath, runtimeDir)
+    || isWithin(privacyAttestationPath, runtimeDir)
+    || isWithin(budgetStatePath, repositoryRoot)
+    || isWithin(privacyAttestationPath, repositoryRoot)
+  ) {
+    throw new Error("Runner state and attestation must be outside repositories and runtime");
+  }
+  if (new Set([
+    budgetStatePath.toLowerCase(),
+    credentialBlobPath.toLowerCase(),
+    privacyAttestationPath.toLowerCase(),
+  ]).size !== 3) {
+    throw new Error("Runner files must use distinct paths");
   }
   if (new Set([
     codexHome.toLowerCase(),

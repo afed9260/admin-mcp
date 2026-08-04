@@ -46,6 +46,11 @@ describe("loadSupportAutopilotShadowRunnerConfig", () => {
     ["lease-length timeout", { SUPPORT_AUTOPILOT_PROCESS_TIMEOUT_MS: "1800000" }],
     ["credential in runtime", { SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: "C:\\ServiceData\\runtime\\token.dpapi" }],
     ["credential in repository", { SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: "C:\\repo\\token.dpapi" }],
+    ["runtime in repository", { SUPPORT_AUTOPILOT_RUNTIME_DIR: "C:\\repo\\runtime" }],
+    ["Codex home in repository", { SUPPORT_AUTOPILOT_CODEX_HOME: "C:\\repo\\codex-home" }],
+    ["budget in runtime", { SUPPORT_AUTOPILOT_BUDGET_STATE_PATH: "C:\\ServiceData\\runtime\\budget.json" }],
+    ["attestation in repository", { SUPPORT_AUTOPILOT_PRIVACY_ATTESTATION_PATH: "C:\\repo\\privacy.json" }],
+    ["shared state file", { SUPPORT_AUTOPILOT_BUDGET_STATE_PATH: "C:\\ServiceSecrets\\support-token.dpapi" }],
     ["non-https backend", { ADMIN_API_BASE_URL: "http://admin.example.test" }],
   ])("rejects %s", (_name, override) => {
     expect(() => loadSupportAutopilotShadowRunnerConfig({

@@ -54,6 +54,7 @@ describe("CodexShadowWorker", () => {
     expect(input.stdin).toContain("support-shadow.1");
     expect(input.stdin).not.toMatch(/ticket|leaseToken|proposedReply/i);
     expect(input.args).toContain("read-only");
+    expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
     expect(JSON.stringify(events)).not.toMatch(/stdout|stderr|prompt|ticket|message|lease|reply/i);
   });
 

@@ -39,14 +39,14 @@ export class SpawnCodexProcessRunner implements CodexProcessRunner {
       });
       const timer = setTimeout(() => {
         timedOut = true;
-        this.terminateTree(child.pid);
+        this.terminateTree(child);
       }, input.timeoutMs);
 
       const capture = (target: "stdout" | "stderr", chunk: Buffer): void => {
         outputBytes += chunk.length;
         if (outputBytes > maximum) {
           outputExceeded = true;
-          this.terminateTree(child.pid);
+          this.terminateTree(child);
           return;
         }
         if (target === "stdout") {
@@ -73,7 +73,8 @@ export class SpawnCodexProcessRunner implements CodexProcessRunner {
     });
   }
 
-  private terminateTree(pid: number | undefined): void {
+  private terminateTree(child: ReturnType<typeof spawn>): void {
+    const pid = child.pid;
     if (pid === undefined) {
       return;
     }
@@ -84,6 +85,8 @@ export class SpawnCodexProcessRunner implements CodexProcessRunner {
         windowsHide: true,
       });
       killer.unref();
+      const fallback = setTimeout(() => child.kill("SIGKILL"), 1_000);
+      fallback.unref();
       return;
     }
     try {

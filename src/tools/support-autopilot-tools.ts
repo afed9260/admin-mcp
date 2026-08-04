@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { SupportAutopilotApiClient } from "../backend/support-autopilot-api-client.js";
 
@@ -50,6 +51,7 @@ const attachmentInputSchema = leaseIdentitySchema.extend({
 const decisionInputSchema = leaseIdentitySchema.extend({
   decisionType: decisionTypeSchema,
   evidenceFactKeys: z.array(z.enum(["ticket.state", "ticket.latest_message"]))
+    .min(1)
     .max(2)
     .refine((keys) => new Set(keys).size === keys.length, "Evidence keys must be unique"),
   expectedLatestMessageId: latestMessageIdSchema,
@@ -82,6 +84,9 @@ const attachmentResponseSchema = z.object({
     !/^[A-Za-z0-9+/]+={0,2}$/.test(value.dataBase64)
     || Buffer.from(value.dataBase64, "base64").toString("base64") !== value.dataBase64
     || Buffer.byteLength(value.dataBase64, "base64") !== value.metadata.byteSize
+    || value.metadata.contentHash !== `sha256:${createHash("sha256")
+      .update(Buffer.from(value.dataBase64, "base64"))
+      .digest("hex")}`
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

@@ -33,14 +33,18 @@ export class CodexShadowWorker {
         cwd: this.config.runtimeDir,
         environment: createCodexChildEnvironment(this.config),
         executablePath: this.config.codexExecutablePath,
-        maxOutputBytes: 1024 * 1024,
+        maxOutputBytes: 16 * 1024 * 1024,
         stdin: this.prompt(),
         timeoutMs: this.config.processTimeoutMs,
       });
       if (result.exitCode !== 0 || result.timedOut) {
         throw new Error("process failed");
       }
-      const observer = new CodexJsonlObserver();
+      const observer = new CodexJsonlObserver({
+        maxBytes: 16 * 1024 * 1024,
+        maxLineBytes: 12 * 1024 * 1024,
+        maxLines: 1_000,
+      });
       observer.push(Buffer.from(result.stdout, "utf8"));
       const summary = observer.finish();
       if (summary.failedToolCalls !== 0 || summary.successfulDecisionSubmissions !== 1) {

@@ -15,6 +15,8 @@ The runner is dormant code. It has no autostart, Windows service, scheduled task
 
 The app-bundled Codex executable under `C:\Program Files\WindowsApps` is rejected. At the time Unit 5 was implemented, the local app-bundled executable also returned `Access is denied`; it is not a valid runner dependency.
 
+`CODEX_HOME`, the empty runtime, the privacy attestation, the budget state, and the DPAPI blob must be outside the application repository. The budget state and attestation must also be outside the empty runtime, and all three state/credential files use distinct paths.
+
 ## Privacy Attestation
 
 The attestation file has exact keys and contains no customer data or secret:

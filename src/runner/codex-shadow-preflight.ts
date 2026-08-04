@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import type { CodexProcessRunner } from "./codex-process-runner.js";
 import type { SupportAutopilotShadowRunnerConfig } from "./support-autopilot-shadow-runner.config.js";
 
@@ -136,10 +137,10 @@ export class CodexShadowPreflight {
       || server.enabled !== true
       || !this.isRecord(transport)
       || transport.type !== "stdio"
-      || transport.command !== this.config.nodeExecutablePath
+      || !this.sameWindowsPath(transport.command, this.config.nodeExecutablePath)
       || !Array.isArray(transport.args)
       || transport.args.length !== 1
-      || transport.args[0] !== this.config.mcpLauncherPath
+      || !this.sameWindowsPath(transport.args[0], this.config.mcpLauncherPath)
       || !(transport.cwd === null || transport.cwd === undefined)
       || !(transport.env === null || (this.isRecord(transport.env) && Object.keys(transport.env).length === 0))
       || !(transport.env_vars === undefined || (Array.isArray(transport.env_vars) && transport.env_vars.length === 0))
@@ -198,6 +199,11 @@ export class CodexShadowPreflight {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private sameWindowsPath(value: unknown, expected: string): boolean {
+    return typeof value === "string"
+      && path.win32.normalize(value).toLowerCase() === path.win32.normalize(expected).toLowerCase();
   }
 }
 

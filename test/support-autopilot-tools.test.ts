@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SupportAutopilotApiClient } from "../src/backend/support-autopilot-api-client.js";
 import {
@@ -136,7 +137,9 @@ describe("registerSupportAutopilotTools", () => {
       metadata: {
         attachmentRef,
         byteSize: 5,
-        contentHash: `sha256:${"b".repeat(64)}`,
+        contentHash: `sha256:${createHash("sha256")
+          .update(Buffer.from(dataBase64, "base64"))
+          .digest("hex")}`,
         contentType: "image/png",
         height: 1,
         sourceMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
@@ -208,6 +211,18 @@ describe("registerSupportAutopilotTools", () => {
       attachmentRef: "att_invalid",
       jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
       leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+    }],
+    ["submit_support_automation_decision", {
+      decisionType: "escalate",
+      evidenceFactKeys: [],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "Insufficient evidence.",
+      jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      proposedReply: null,
+      selectedPolicyId: "unclassified.v1",
       workerId: "support-worker.1",
     }],
     ["submit_support_automation_decision", {
