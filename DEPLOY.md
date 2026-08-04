@@ -40,9 +40,9 @@ Use a read-only backend service token if the backend supports it. If write tools
 
 ### Support Autopilot Queue Profile
 
-Unit 4 exposes only queue availability, claim, lease renewal, and aggregate health. It still cannot read ticket
-content, invoke Codex, submit a decision, reply to a customer, or mutate ticket lifecycle state. Do not use the profile
-to process production tickets yet.
+Unit 5 exposes seven fixed shadow tools. It can read minimized lease-scoped context and supported image attachments,
+then store one internal shadow decision. It still cannot reply to a customer, execute a support action, run arbitrary
+diagnostics, or mutate ticket lifecycle state.
 
 Required runtime values for the future dedicated runner:
 
@@ -56,8 +56,9 @@ SUPPORT_AUTOPILOT_SERVICE_TOKEN=<short-lived-dedicated-token>
 The token must be injected into the child process from OS or MCP credential storage. It must not be Arkadiy's admin
 token, `ADMIN_MCP_TOKEN`, `ADMIN_API_TOKEN`, `SUPPORT_AI_INTERNAL_TOKEN`, a provider credential, a command-line
 argument, or a value committed to a config file. The backend credential expires within 24 hours and records its
-`issuedAt` timestamp. Credential rotation remains a production-runner prerequisite; queue lease renewal does not renew
-the service credential.
+`issuedAt` timestamp. Generate it under the dedicated Windows runner account with
+`scripts/new-support-autopilot-credential.ps1`; the script prints only hash/timestamp metadata for the guarded server
+rotation workflow. Queue lease renewal does not renew the service credential.
 
 Both backend flags remain disabled by default:
 

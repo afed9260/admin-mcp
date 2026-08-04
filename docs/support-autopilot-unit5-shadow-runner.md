@@ -10,12 +10,21 @@ The runner is dormant code. It has no autostart, Windows service, scheduled task
 4. Create a dedicated absolute `CODEX_HOME` containing exactly one enabled MCP server named `support-autopilot`.
 5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure no MCP environment values and no other servers.
 6. Create an empty runtime directory. Never place repositories, ticket exports, or customer files there.
-7. Provision the service credential with `scripts/protect-support-autopilot-token.ps1`. The script prompts with `Read-Host -AsSecureString`, uses DPAPI CurrentUser protection, and applies a user-only ACL.
+7. Generate the service credential with `scripts/new-support-autopilot-credential.ps1`. It creates 256 random bits, protects the token with DPAPI CurrentUser, applies a user-only ACL, and prints only the SHA-256 digest and bounded timestamps needed by the server rotation workflow. Use `protect-support-autopilot-token.ps1` only when a separately issued token must be imported through `Read-Host -AsSecureString`.
 8. Record and approve the privacy attestation before setting backend or runner gates.
 
 The app-bundled Codex executable under `C:\Program Files\WindowsApps` is rejected. At the time Unit 5 was implemented, the local app-bundled executable also returned `Access is denied`; it is not a valid runner dependency.
 
 `CODEX_HOME`, the empty runtime, the privacy attestation, the budget state, and the DPAPI blob must be outside the application repository. The budget state and attestation must also be outside the empty runtime, and all three state/credential files use distinct paths.
+
+Generate a fresh, non-overwriting credential candidate under the dedicated Windows account:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/new-support-autopilot-credential.ps1 `
+  -OutputPath C:\support-autopilot\credentials\credential-<timestamp>.dpapi
+```
+
+The JSON output contains exactly `tokenSha256`, `issuedAt`, and `expiresAt`. Send only those values to the guarded Admin backend rotation workflow. Never send or print the decrypted token. Keep the previous blob until the server rotation and local preflight both succeed.
 
 ## Privacy Attestation
 
