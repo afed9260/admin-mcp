@@ -121,10 +121,13 @@ For `ADMIN_MCP_PROFILE=support_autopilot`, the complete expected tool list is:
 - `get_support_automation_work_availability`
 - `claim_support_automation_job`
 - `renew_support_automation_lease`
+- `get_support_automation_context`
+- `get_support_automation_attachment`
+- `submit_support_automation_decision`
 - `get_support_automation_health`
 
-No regular admin or readonly tool may be visible in that profile. Availability and health are the only safe Unit 4
-smoke checks. Do not claim a production job.
+No regular admin or readonly tool may be visible in that profile. Health is the only safe smoke check before the
+shadow runner privacy and isolation preflight passes. Do not claim a production job manually.
 
 After Codex starts with the MCP server, verify that these tools are visible:
 

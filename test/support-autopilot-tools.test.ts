@@ -43,19 +43,30 @@ describe("registerSupportAutopilotTools", () => {
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
     expect(tools.find((tool) => tool.name === "renew_support_automation_lease")?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "get_support_automation_context")?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "get_support_automation_attachment")?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "submit_support_automation_decision")?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
   });
 
-  it("reads availability and health from fixed endpoints", async () => {
+  it("posts availability heartbeat and reads health from fixed endpoints", async () => {
     const get = vi.fn()
-      .mockResolvedValueOnce({ workAvailable: false, retryAfterMs: 5_000 })
       .mockResolvedValueOnce({ pendingJobs: 0, activeLeases: 0 });
-    const client = await connect({ get, post: vi.fn() });
+    const post = vi.fn().mockResolvedValueOnce({ workAvailable: false, retryAfterMs: 5_000 });
+    const client = await connect({ get, post });
 
-    await client.callTool({ name: "get_support_automation_work_availability", arguments: {} });
+    await client.callTool({
+      name: "get_support_automation_work_availability",
+      arguments: { workerId: "support-worker.1" },
+    });
     await client.callTool({ name: "get_support_automation_health", arguments: {} });
 
-    expect(get).toHaveBeenNthCalledWith(1, "/support-automation/work-availability");
-    expect(get).toHaveBeenNthCalledWith(2, "/support-automation/health");
+    expect(post).toHaveBeenCalledWith("/support-automation/work-availability", {
+      workerId: "support-worker.1",
+    });
+    expect(get).toHaveBeenCalledWith("/support-automation/health");
   });
 
   it("claims a job using only the validated worker id", async () => {
@@ -100,14 +111,115 @@ describe("registerSupportAutopilotTools", () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
+  it("reads lease-scoped context through one fixed endpoint", async () => {
+    const post = vi.fn().mockResolvedValue({ mode: "shadow", messages: [] });
+    const client = await connect({ get: vi.fn(), post });
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const leaseToken = "A".repeat(43);
+
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: { jobId, leaseToken, workerId: "support-worker.1" },
+    });
+
+    expect(post).toHaveBeenCalledWith(`/support-automation/jobs/${jobId}/context`, {
+      leaseToken,
+      workerId: "support-worker.1",
+    });
+  });
+
+  it("returns an attachment as one image block plus safe metadata", async () => {
+    const dataBase64 = Buffer.from("image").toString("base64");
+    const attachmentRef = `att_${"a".repeat(64)}`;
+    const post = vi.fn().mockResolvedValue({
+      dataBase64,
+      metadata: {
+        attachmentRef,
+        byteSize: 5,
+        contentHash: `sha256:${"b".repeat(64)}`,
+        contentType: "image/png",
+        height: 1,
+        sourceMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+        width: 1,
+      },
+    });
+    const client = await connect({ get: vi.fn(), post });
+
+    const result = await client.callTool({
+      name: "get_support_automation_attachment",
+      arguments: {
+        attachmentRef,
+        jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+        leaseToken: "A".repeat(43),
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0]).toMatchObject({
+      type: "image",
+      data: dataBase64,
+      mimeType: "image/png",
+    });
+    expect(JSON.stringify(result.content[1])).not.toContain(dataBase64);
+  });
+
+  it("submits one exact bounded shadow decision without a job id in the body", async () => {
+    const post = vi.fn().mockResolvedValue({
+      customerAction: "none",
+      jobStatus: "completed",
+      outcome: "shadow_recorded",
+      ticketMutation: false,
+    });
+    const client = await connect({ get: vi.fn(), post });
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const body = {
+      decisionType: "escalate",
+      evidenceFactKeys: ["ticket.state"],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "Insufficient evidence.",
+      leaseToken: "A".repeat(43),
+      proposedReply: null,
+      selectedPolicyId: "unclassified.v1",
+      workerId: "support-worker.1",
+    };
+
+    await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: { jobId, ...body },
+    });
+
+    expect(post).toHaveBeenCalledWith(`/support-automation/jobs/${jobId}/decision`, body);
+  });
+
   it.each([
-    ["get_support_automation_work_availability", { unexpected: true }],
+    ["get_support_automation_work_availability", {}],
+    ["get_support_automation_work_availability", { workerId: "support-worker.1", unexpected: true }],
     ["get_support_automation_health", { unexpected: true }],
     ["claim_support_automation_job", { workerId: "UPPERCASE" }],
     ["claim_support_automation_job", { workerId: "support-worker.1", unexpected: true }],
     ["renew_support_automation_lease", {
       jobId: "not-a-uuid",
       leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+    }],
+    ["get_support_automation_attachment", {
+      attachmentRef: "att_invalid",
+      jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+    }],
+    ["submit_support_automation_decision", {
+      decisionType: "auto_reply",
+      evidenceFactKeys: ["ticket.state"],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "Known policy.",
+      jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      proposedReply: null,
+      selectedPolicyId: "avito_reconnect_required.v1",
       workerId: "support-worker.1",
     }],
     ["renew_support_automation_lease", {
