@@ -56,7 +56,7 @@ SUPPORT_AUTOPILOT_SERVICE_TOKEN=<short-lived-dedicated-token>
 The token must be injected into the child process from OS or MCP credential storage. It must not be Arkadiy's admin
 token, `ADMIN_MCP_TOKEN`, `ADMIN_API_TOKEN`, `SUPPORT_AI_INTERNAL_TOKEN`, a provider credential, a command-line
 argument, or a value committed to a config file. The backend credential expires within 24 hours and records its
-`issuedAt` timestamp. Generate it under the dedicated Windows runner account with
+`issuedAt` timestamp. Generate it under the same Windows account that runs the shadow runner with
 `scripts/new-support-autopilot-credential.ps1`; the script prints only hash/timestamp metadata for the guarded server
 rotation workflow. Queue lease renewal does not renew the service credential.
 
