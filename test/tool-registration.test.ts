@@ -21,6 +21,7 @@ const config: AdminMcpConfig = {
   adminApiToken: "dummy",
   auditLogPath: "./audit/test-tool-registration.jsonl",
   enableWriteTools: false,
+  profile: "admin",
 };
 
 const servers: McpServer[] = [];
@@ -151,6 +152,32 @@ describe("createAdminMcpServer", () => {
       ...safeAutomationToolNames,
       ...writeToolNames,
     ]);
+  });
+
+  it("registers only readonly tools for the readonly profile", async () => {
+    const client = await connect(createAdminMcpServer({
+      ...config,
+      profile: "readonly",
+    }));
+
+    expect((await client.listTools()).tools.map((tool) => tool.name))
+      .toEqual(readonlyToolNames);
+  });
+
+  it("exposes no general tools for the support autopilot profile before lease APIs exist", async () => {
+    const client = await connect(createAdminMcpServer({
+      ...config,
+      adminApiToken: "dedicated-support-token",
+      profile: "support_autopilot",
+    }));
+
+    const toolNames = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(toolNames).toEqual([]);
+    expect(toolNames).not.toEqual(expect.arrayContaining([
+      ...readonlyToolNames,
+      ...safeAutomationToolNames,
+      ...writeToolNames,
+    ]));
   });
 
   it("keeps legacy readonly registration readonly even when write tools are enabled", async () => {

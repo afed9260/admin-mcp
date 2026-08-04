@@ -33,9 +33,30 @@ ADMIN_API_BASE_URL=https://malikbot.ru/new-admin
 ADMIN_API_TOKEN=replace-with-read-only-admin-token
 AUDIT_LOG_PATH=/var/log/admin-mcp/admin-mcp.jsonl
 ADMIN_MCP_ENABLE_WRITE=false
+ADMIN_MCP_PROFILE=admin
 ```
 
 Use a read-only backend service token if the backend supports it. If write tools are enabled, the token must have the matching admin permissions. Do not commit or paste the token into prompts.
+
+### Support Autopilot Foundation Profile
+
+Unit 3 adds a dormant `support_autopilot` profile. It deliberately advertises an empty tools list until Unit 4 adds
+server-side job leases. Do not use the profile to process production tickets yet.
+
+Required runtime values for the future dedicated runner:
+
+```text
+ADMIN_API_BASE_URL=https://malikbot.ru/new-admin
+ADMIN_MCP_PROFILE=support_autopilot
+ADMIN_MCP_ENABLE_WRITE=false
+SUPPORT_AUTOPILOT_SERVICE_TOKEN=<short-lived-dedicated-token>
+```
+
+The token must be injected into the child process from OS or MCP credential storage. It must not be Arkadiy's admin
+token, `ADMIN_MCP_TOKEN`, `ADMIN_API_TOKEN`, `SUPPORT_AI_INTERNAL_TOKEN`, a provider credential, a command-line
+argument, or a value committed to a config file. The backend credential expires within 24 hours. Unit 4 is responsible
+for adding a renewal mechanism before the profile becomes operational. The backend also records the credential
+`issuedAt` timestamp and rejects a complete issued-to-expiry interval longer than 24 hours.
 
 ## 4. Codex MCP Config Example
 
@@ -56,6 +77,7 @@ ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
 ADMIN_API_TOKEN = "replace-with-read-only-admin-token"
 AUDIT_LOG_PATH = "/var/log/admin-mcp/admin-mcp.jsonl"
 ADMIN_MCP_ENABLE_WRITE = "false"
+ADMIN_MCP_PROFILE = "admin"
 ```
 
 Example for Windows:
@@ -70,6 +92,7 @@ startup_timeout_sec = 120
 ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
 AUDIT_LOG_PATH = "C:\\Users\\Arkadiy\\Desktop\\Аркадий\\ИИ-АГЕНТ\\админка\\admin-mcp\\audit\\admin-mcp.jsonl"
 ADMIN_MCP_ENABLE_WRITE = "false"
+ADMIN_MCP_PROFILE = "admin"
 ```
 
 Set the token in the user environment and restart Codex:
