@@ -1,6 +1,9 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { CodexProcessRunner } from "./codex-process-runner.js";
+import {
+  readSingleCodexCommandOutput,
+  type CodexProcessRunner,
+} from "./codex-process-runner.js";
 import type { SupportAutopilotShadowRunnerConfig } from "./support-autopilot-shadow-runner.config.js";
 
 type EnabledConfig = Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }>;
@@ -18,6 +21,7 @@ export const CODEX_RESTRICTED_EXEC_ARGS = [
   "--disable", "apps",
   "--disable", "plugins",
   "--disable", "multi_agent",
+  "--config", "mcp_servers.support-autopilot.default_tools_approval_mode=\"approve\"",
   "exec",
   "--ephemeral",
   "--json",
@@ -112,21 +116,21 @@ export class CodexShadowPreflight {
 
   private async assertVersion(): Promise<void> {
     const result = await this.runCommand(["--version"], 64 * 1024);
-    if (!/^codex-cli \d+\.\d+\.\d+(?:[-+][^\r\n]+)?$/.test(result.stdout.trim())) {
+    if (!/^codex-cli \d+\.\d+\.\d+(?:[-+][^\r\n]+)?$/.test(readSingleCodexCommandOutput(result))) {
       throw new Error("invalid version");
     }
   }
 
   private async assertChatGptLogin(): Promise<void> {
     const result = await this.runCommand(["login", "status"], 64 * 1024);
-    if (result.stdout.trim() !== "Logged in using ChatGPT") {
+    if (readSingleCodexCommandOutput(result) !== "Logged in using ChatGPT") {
       throw new Error("invalid auth");
     }
   }
 
   private async assertMcpAllowlist(): Promise<void> {
     const result = await this.runCommand(["mcp", "list", "--json"], 256 * 1024);
-    const parsed: unknown = JSON.parse(result.stdout);
+    const parsed: unknown = JSON.parse(readSingleCodexCommandOutput(result));
     if (!Array.isArray(parsed) || parsed.length !== 1 || !this.isRecord(parsed[0])) {
       throw new Error("invalid mcp allowlist");
     }

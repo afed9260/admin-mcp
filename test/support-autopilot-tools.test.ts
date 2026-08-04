@@ -50,6 +50,12 @@ describe("registerSupportAutopilotTools", () => {
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
     expect(tools.find((tool) => tool.name === "submit_support_automation_decision")?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    const decisionDescription = tools.find(
+      (tool) => tool.name === "submit_support_automation_decision",
+    )?.description;
+    expect(decisionDescription).toContain("exactly these top-level fields");
+    expect(decisionDescription).toContain("evidenceFactKeys");
+    expect(decisionDescription).toContain("Do not add a decision object or aliases");
   });
 
   it("posts availability heartbeat and reads health from fixed endpoints", async () => {

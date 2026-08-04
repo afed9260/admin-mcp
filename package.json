@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "support-autopilot:shadow": "node dist/runner/support-autopilot-shadow-main.js",
+    "support-autopilot:synthetic-canary": "node dist/synthetic/support-autopilot-synthetic-canary-main.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify": "tsc -p tsconfig.json --noEmit && vitest run && tsc -p tsconfig.json"

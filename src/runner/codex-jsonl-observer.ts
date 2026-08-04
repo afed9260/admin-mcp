@@ -95,7 +95,11 @@ export class CodexJsonlObserver {
       throw new Error("invalid event");
     }
     this.summary.totalLines += 1;
-    if (!this.isRecord(event.item) || event.item.type !== "mcp_tool_call") {
+    if (
+      event.type !== "item.completed"
+      || !this.isRecord(event.item)
+      || event.item.type !== "mcp_tool_call"
+    ) {
       return;
     }
     const item = event.item;
