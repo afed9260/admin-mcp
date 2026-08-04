@@ -36,6 +36,8 @@ pnpm dev
 ```
 
 Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
+The dormant Unit 5 runner and privacy/DPAPI rollout are documented in
+[docs/support-autopilot-unit5-shadow-runner.md](./docs/support-autopilot-unit5-shadow-runner.md).
 
 ## Exposed Tools
 
