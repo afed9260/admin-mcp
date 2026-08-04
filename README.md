@@ -5,12 +5,27 @@ MCP server for MalikBot admin data.
 By default it exposes read-only tools and safe automation tools only. Guarded write tools are available only when
 `ADMIN_MCP_ENABLE_WRITE=true`.
 
+`ADMIN_MCP_PROFILE` selects one explicit surface:
+
+- `admin` (default) - existing read, safe automation, and optional guarded write tools;
+- `readonly` - existing read-only tools only;
+- `support_autopilot` - dedicated automation identity and support-only contracts.
+
+The `support_autopilot` profile is intentionally empty in foundation Unit 3. It must not expose ticket content until
+the backend adds lease-scoped automation contracts in Unit 4.
+
 ## Environment Variables
 
 - `ADMIN_API_BASE_URL`
 - `ADMIN_API_TOKEN`
 - `AUDIT_LOG_PATH`
 - `ADMIN_MCP_ENABLE_WRITE` - optional, set to `true` to expose guarded write tools
+- `ADMIN_MCP_PROFILE` - optional; `admin`, `readonly`, or `support_autopilot`
+- `SUPPORT_AUTOPILOT_SERVICE_TOKEN` - required only for `support_autopilot`; never falls back to an admin token
+
+`ADMIN_MCP_ENABLE_WRITE=true` is rejected for `readonly` and `support_autopilot`. The support token must be a separate,
+short-lived credential injected from OS or MCP credential storage at process start. Do not store it in this repository,
+Codex configuration, prompts, or a persistent general user environment.
 
 ## Local Commands
 
