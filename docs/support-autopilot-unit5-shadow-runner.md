@@ -4,20 +4,22 @@ The runner is dormant code. It has no autostart, Windows service, scheduled task
 
 ## Prerequisites
 
-1. Use a dedicated Windows service account.
+1. Choose an isolation mode. A dedicated Windows service account is preferred for unattended multi-user hosts. A single-user desktop mode may run under the current Windows account, but it must still use a dedicated `CODEX_HOME`, empty runtime, credential directory, and state directory used only by the support runner.
 2. Install the standalone Codex CLI, for example with `npm install -g @openai/codex`.
 3. Authenticate that CLI with ChatGPT in a reviewed workspace. API-key login is rejected.
 4. Create a dedicated absolute `CODEX_HOME` containing exactly one enabled MCP server named `support-autopilot`.
 5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure no MCP environment values and no other servers.
 6. Create an empty runtime directory. Never place repositories, ticket exports, or customer files there.
-7. Generate the service credential with `scripts/new-support-autopilot-credential.ps1`. It creates 256 random bits, protects the token with DPAPI CurrentUser, applies a user-only ACL, and prints only the SHA-256 digest and bounded timestamps needed by the server rotation workflow. Use `protect-support-autopilot-token.ps1` only when a separately issued token must be imported through `Read-Host -AsSecureString`.
+7. Generate the service credential with `scripts/new-support-autopilot-credential.ps1` under the same Windows account that runs the shadow runner. It creates 256 random bits, protects the token with DPAPI CurrentUser, applies a user-only ACL, and prints only the SHA-256 digest and bounded timestamps needed by the server rotation workflow. Use `protect-support-autopilot-token.ps1` only when a separately issued token must be imported through `Read-Host -AsSecureString`.
 8. Record and approve the privacy attestation before setting backend or runner gates.
 
 The app-bundled Codex executable under `C:\Program Files\WindowsApps` is rejected. At the time Unit 5 was implemented, the local app-bundled executable also returned `Access is denied`; it is not a valid runner dependency.
 
+Single-user desktop mode accepts a weaker OS boundary: another process running as that Windows user can decrypt the DPAPI credential. The separate `CODEX_HOME`, empty runtime, allowlisted MCP profile, short credential lifetime, and disabled customer delivery remain mandatory. Do not use this mode on a shared or untrusted Windows login.
+
 `CODEX_HOME`, the empty runtime, the privacy attestation, the budget state, and the DPAPI blob must be outside the application repository. The budget state and attestation must also be outside the empty runtime, and all three state/credential files use distinct paths.
 
-Generate a fresh, non-overwriting credential candidate under the dedicated Windows account:
+Generate a fresh, non-overwriting credential candidate under the same Windows account that runs the shadow runner:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/new-support-autopilot-credential.ps1 `
@@ -35,13 +37,13 @@ The attestation file has exact keys and contains no customer data or secret:
   "attestationId": "support-privacy-v1",
   "dataControlsApproved": true,
   "expiresAt": "2026-08-30T00:00:00.000Z",
-  "modelTrainingDisabled": false,
+  "modelTrainingDisabled": true,
   "privacyGateApproved": true,
-  "workspaceType": "business"
+  "workspaceType": "pro"
 }
 ```
 
-The id and expiry must exactly match runner and AI-backend configuration. Plus/Pro workspaces require `modelTrainingDisabled=true`.
+The id and expiry must exactly match runner and AI-backend configuration. A Pro workspace requires `modelTrainingDisabled=true`; do not approve the attestation until the corresponding ChatGPT data control is verified.
 
 ## Runner Environment
 
