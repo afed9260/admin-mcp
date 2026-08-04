@@ -38,10 +38,11 @@ ADMIN_MCP_PROFILE=admin
 
 Use a read-only backend service token if the backend supports it. If write tools are enabled, the token must have the matching admin permissions. Do not commit or paste the token into prompts.
 
-### Support Autopilot Foundation Profile
+### Support Autopilot Queue Profile
 
-Unit 3 adds a dormant `support_autopilot` profile. It deliberately advertises an empty tools list until Unit 4 adds
-server-side job leases. Do not use the profile to process production tickets yet.
+Unit 4 exposes only queue availability, claim, lease renewal, and aggregate health. It still cannot read ticket
+content, invoke Codex, submit a decision, reply to a customer, or mutate ticket lifecycle state. Do not use the profile
+to process production tickets yet.
 
 Required runtime values for the future dedicated runner:
 
@@ -54,9 +55,19 @@ SUPPORT_AUTOPILOT_SERVICE_TOKEN=<short-lived-dedicated-token>
 
 The token must be injected into the child process from OS or MCP credential storage. It must not be Arkadiy's admin
 token, `ADMIN_MCP_TOKEN`, `ADMIN_API_TOKEN`, `SUPPORT_AI_INTERNAL_TOKEN`, a provider credential, a command-line
-argument, or a value committed to a config file. The backend credential expires within 24 hours. Unit 4 is responsible
-for adding a renewal mechanism before the profile becomes operational. The backend also records the credential
-`issuedAt` timestamp and rejects a complete issued-to-expiry interval longer than 24 hours.
+argument, or a value committed to a config file. The backend credential expires within 24 hours and records its
+`issuedAt` timestamp. Credential rotation remains a production-runner prerequisite; queue lease renewal does not renew
+the service credential.
+
+Both backend flags remain disabled by default:
+
+```text
+SUPPORT_AUTOMATION_JOB_CREATION_ENABLED=false
+SUPPORT_AUTOMATION_CLAIMS_ENABLED=false
+```
+
+This repository adds no executable bridge command or automatic startup. Unit 4 must be validated with tests and
+staging-only probes; enabling production processing belongs to a later rollout.
 
 ## 4. Codex MCP Config Example
 
@@ -104,6 +115,16 @@ Set the token in the user environment and restart Codex:
 Restart Codex after changing the MCP config or user environment.
 
 ## 5. Smoke Test
+
+For `ADMIN_MCP_PROFILE=support_autopilot`, the complete expected tool list is:
+
+- `get_support_automation_work_availability`
+- `claim_support_automation_job`
+- `renew_support_automation_lease`
+- `get_support_automation_health`
+
+No regular admin or readonly tool may be visible in that profile. Availability and health are the only safe Unit 4
+smoke checks. Do not claim a production job.
 
 After Codex starts with the MCP server, verify that these tools are visible:
 
