@@ -11,8 +11,8 @@ By default it exposes read-only tools and safe automation tools only. Guarded wr
 - `readonly` - existing read-only tools only;
 - `support_autopilot` - dedicated automation identity and support-only contracts.
 
-The `support_autopilot` profile is intentionally empty in foundation Unit 3. It must not expose ticket content until
-the backend adds lease-scoped automation contracts in Unit 4.
+The `support_autopilot` profile exposes only four lease-scoped queue tools. It does not expose ticket text,
+attachments, customer profiles, provider data, general admin reads, or customer-facing actions.
 
 ## Environment Variables
 
@@ -38,6 +38,22 @@ pnpm dev
 Deployment and MCP client setup are documented in [DEPLOY.md](./DEPLOY.md).
 
 ## Exposed Tools
+
+The restricted `support_autopilot` profile exposes exactly:
+
+- `get_support_automation_work_availability`
+- `claim_support_automation_job`
+- `renew_support_automation_lease`
+- `get_support_automation_health`
+
+Claim and renewal use one-time lease tokens. These tools intentionally bypass the general admin audit wrapper so raw
+lease tokens are not persisted. The backend stores only their SHA-256 hashes.
+
+`SupportAutopilotQueueBridge` is a reusable polling library with an injected worker. Unit 4 does not provide a worker
+implementation, executable, scheduler, package script, Codex invocation, or startup registration. Calling the bridge
+therefore requires explicit later-unit wiring and cannot process a ticket by itself.
+
+The regular `admin` and `readonly` profiles retain their existing tools:
 
 - `get_funnel_stats`
 - `get_cost_stats`
