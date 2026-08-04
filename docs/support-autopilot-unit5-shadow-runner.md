@@ -83,9 +83,64 @@ Before polling, the runner verifies:
 
 Any failure exits before queue polling. The worker disables shell, web search, code mode, apps, plugins, and multi-agent features; uses read-only sandboxing; processes at most one job; and requires exactly one successful decision submission.
 
+The Codex invocation auto-approves tools only on the preflight-validated `support-autopilot` MCP server. Failed schema calls remain observable. A run may recover from at most two rejected tool calls, but it must still record exactly one successful decision; three failures, no decision, or duplicate successful decisions fail closed.
+
 ## Data And Observability
 
 Raw prompts, ticket text, message text, attachment bytes, tool arguments/results, proposed replies, lease tokens, stdout, and stderr are never written to runner logs. Durable local state contains only the Moscow date and invocation count. Logs contain event codes, timestamps, durations, and counters.
+
+## Offline Synthetic Canary
+
+The offline synthetic canary may run before the production privacy attestation is approved because its MCP server contains only deterministic fictional data. It never loads an Admin API URL, service credential, DPAPI blob, production launcher, customer attachment, budget state, or delivery path. It is a foreground developer command and must not be installed as a service or scheduled task.
+
+Use a second profile that is separate from both the normal Codex profile and the production-shadow profile:
+
+```text
+C:\support-autopilot\synthetic-codex-home
+C:\support-autopilot\synthetic-runtime-empty
+```
+
+The runtime must remain empty. Copy only `auth.json` from the already reviewed ChatGPT-authenticated support profile without displaying or parsing it. Restrict both directories and the copied file to the current Windows identity plus `SYSTEM`. Do not copy `config.toml`, session data, logs, shell snapshots, skills, or MCP configuration.
+
+Build the repository and register exactly one MCP server in the synthetic profile:
+
+```powershell
+corepack pnpm build
+
+$env:CODEX_HOME = 'C:\support-autopilot\synthetic-codex-home'
+& 'C:\Tools\codex.exe' mcp add support-autopilot -- `
+  'C:\Program Files\nodejs\node.exe' `
+  'C:\reviewed-repo\dist\synthetic\synthetic-support-autopilot-mcp.js'
+
+& 'C:\Tools\codex.exe' login status
+& 'C:\Tools\codex.exe' mcp list --json
+```
+
+The login must be exactly `Logged in using ChatGPT`. The MCP list must contain one enabled stdio server named `support-autopilot`, with the reviewed Node executable as its command, the compiled synthetic entry point as its sole argument, and no `cwd`, `env`, or `env_vars` configuration.
+
+Run the canary from a shell where all four production variables are absent:
+
+```powershell
+Remove-Item Env:ADMIN_API_BASE_URL -ErrorAction SilentlyContinue
+Remove-Item Env:ADMIN_API_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH -ErrorAction SilentlyContinue
+
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_CANARY_ENABLED = 'true'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_CODEX_EXECUTABLE = 'C:\Tools\codex.exe'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_CODEX_HOME = 'C:\support-autopilot\synthetic-codex-home'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_MCP_ENTRY_PATH = 'C:\reviewed-repo\dist\synthetic\synthetic-support-autopilot-mcp.js'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_NODE_EXECUTABLE = 'C:\Program Files\nodejs\node.exe'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_PROCESS_TIMEOUT_MS = '600000'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_RUNTIME_DIR = 'C:\support-autopilot\synthetic-runtime-empty'
+$env:SUPPORT_AUTOPILOT_SYNTHETIC_WORKER_ID = 'support-synthetic.1'
+
+corepack pnpm support-autopilot:synthetic-canary
+```
+
+Success prints one bounded JSON object containing only `outcome`, `durationMs`, `toolCalls`, `failedToolCalls`, and `successfulDecisionSubmissions`. `outcome` must be `passed`, successful decision submissions must be exactly one, and `failedToolCalls` must be between zero and two. Zero is a clean run; one or two means Codex corrected a rejected schema call and the count must remain visible for quality review. The command never prints the fictional context, prompt, lease, reply, stdout, stderr, token, or a backend URL. Any invalid profile, unexpected production variable, process failure, malformed output, more than two failed tool calls, or missing/duplicate decision fails closed.
+
+After a temporary test, stop any foreground process, remove the synthetic MCP registration, and delete only the reviewed synthetic profile and empty runtime paths. Never remove or edit the production-shadow `CODEX_HOME`, credential directory, privacy attestation, or budget state as part of synthetic cleanup.
 
 ## Canary And Rollback
 

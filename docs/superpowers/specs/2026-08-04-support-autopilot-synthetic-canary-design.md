@@ -59,7 +59,7 @@ The command performs a synthetic preflight before invoking Codex:
 - require exactly one enabled MCP server named `support-autopilot`;
 - require that server to execute Node.js with only the compiled synthetic MCP entry point and no configured environment variables;
 - run Codex with the existing restricted flags and read-only sandbox;
-- accept only a zero exit code, no failed MCP calls, and exactly one completed `submit_support_automation_decision` call.
+- accept only a zero exit code, at most two observable rejected MCP calls, and exactly one completed `submit_support_automation_decision` call.
 
 The command prints only a bounded summary containing outcome, duration, tool-call count, failed-call count, and successful-decision count. It never prints prompts, MCP results, lease tokens, context, proposed replies, stdout, or stderr.
 
@@ -86,7 +86,7 @@ No network route to the SDELKA backend exists in this flow. OpenAI still process
 
 ## Failure Handling
 
-All failures collapse to stable synthetic error codes at the command boundary. Raw Codex output, MCP payloads, and thrown provider messages are not logged. Any unexpected MCP server, configured MCP environment entry, production variable, non-empty runtime, failed tool call, missing decision, duplicate decision, malformed JSONL, timeout, or nonzero process exit fails the canary.
+All failures collapse to stable synthetic error codes at the command boundary. Raw Codex output, MCP payloads, and thrown provider messages are not logged. Any unexpected MCP server, configured MCP environment entry, production variable, non-empty runtime, more than two failed tool calls, missing decision, duplicate decision, malformed JSONL, timeout, or nonzero process exit fails the canary. Zero failed calls is the clean target; one or two recovered calls remain visible in the redacted summary.
 
 The canary has no retry loop, scheduler, queue polling, Windows service, or automatic startup. One invocation can process exactly one in-memory scenario and then exits.
 

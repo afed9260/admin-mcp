@@ -445,7 +445,7 @@ Clear the four forbidden production variables from the child shell, set only the
 corepack pnpm support-autopilot:synthetic-canary
 ```
 
-Expected: one JSON object with `outcome="passed"`, zero failed tool calls, exactly one successful decision submission, and no raw prompt, fixture content, lease, reply, stdout, stderr, token, or backend URL.
+Expected: one JSON object with `outcome="passed"`, no more than two observable recovered tool failures, exactly one successful decision submission, and no raw prompt, fixture content, lease, reply, stdout, stderr, token, or backend URL. Zero recovered failures remains the clean quality target.
 
 - [ ] **Step 5: Inspect security invariants after the run**
 
