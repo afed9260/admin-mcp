@@ -65,7 +65,10 @@ describe("CodexShadowPreflight", () => {
         args: [config.mcpLauncherPath],
         command: config.nodeExecutablePath,
         cwd: null,
-        env: null,
+        env: {
+          ADMIN_API_BASE_URL: config.adminApiBaseUrl,
+          SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: config.credentialBlobPath,
+        },
         env_vars: [],
         type: "stdio",
       },
@@ -90,16 +93,28 @@ describe("CodexShadowPreflight", () => {
       return {
         exitCode: 0,
         stderr: "",
-        stdout: `${JSON.stringify({
-          item: {
-            error: null,
-            server: "support-autopilot",
-            status: "completed",
-            tool: "get_support_automation_health",
-            type: "mcp_tool_call",
+        stdout: [
+          {
+            item: {
+              error: null,
+              server: "support-autopilot",
+              status: "in_progress",
+              tool: "get_support_automation_health",
+              type: "mcp_tool_call",
+            },
+            type: "item.started",
           },
-          type: "item.completed",
-        })}\n`,
+          {
+            item: {
+              error: null,
+              server: "support-autopilot",
+              status: "completed",
+              tool: "get_support_automation_health",
+              type: "mcp_tool_call",
+            },
+            type: "item.completed",
+          },
+        ].map((event) => JSON.stringify(event)).join("\n") + "\n",
         timedOut: false,
       };
     });
