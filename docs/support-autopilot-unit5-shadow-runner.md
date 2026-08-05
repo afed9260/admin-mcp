@@ -8,7 +8,7 @@ The runner is dormant code. It has no autostart, Windows service, scheduled task
 2. Install the standalone Codex CLI, for example with `npm install -g @openai/codex`.
 3. Authenticate that CLI with ChatGPT in a reviewed workspace. API-key login is rejected.
 4. Create a dedicated absolute `CODEX_HOME` containing exactly one enabled MCP server named `support-autopilot`.
-5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure no MCP environment values and no other servers.
+5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure exactly the two reviewed non-secret MCP environment values `ADMIN_API_BASE_URL` and `SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH`; configure no token, no `env_vars`, and no other servers.
 6. Create an empty runtime directory. Never place repositories, ticket exports, or customer files there.
 7. Generate the service credential with `scripts/new-support-autopilot-credential.ps1` under the same Windows account that runs the shadow runner. It creates 256 random bits, protects the token with DPAPI CurrentUser, applies a user-only ACL, and prints only the SHA-256 digest and bounded timestamps needed by the server rotation workflow. Use `protect-support-autopilot-token.ps1` only when a separately issued token must be imported through `Read-Host -AsSecureString`.
 8. Record and approve the privacy attestation before setting backend or runner gates.
@@ -66,6 +66,16 @@ SUPPORT_AUTOPILOT_BUDGET_STATE_PATH=<absolute-json-state>
 SUPPORT_AUTOPILOT_MCP_LAUNCHER_PATH=<absolute-built-launcher.js>
 ADMIN_API_BASE_URL=<credential-free-https-url>
 ```
+
+Codex does not forward arbitrary parent-process values to stdio MCP servers. Register the same reviewed URL and DPAPI path explicitly in the dedicated profile:
+
+```toml
+[mcp_servers.support-autopilot.env]
+ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
+SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH = "C:\\support-autopilot\\credentials\\support-autopilot.dpapi"
+```
+
+The production preflight requires these exact two keys and exact configured values. The local doctor requires the exact credential path and a credential-free HTTPS URL. Any token, extra key, `env_vars` entry, URL credential/query/hash, or path mismatch fails closed. The synthetic profile remains environment-free.
 
 Build with `npm run build`. `npm run support-autopilot:shadow` starts the foreground process only when the exact enable value is `true`.
 

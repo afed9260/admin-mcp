@@ -101,6 +101,10 @@ export class CodexShadowPreflight {
   private async assertMcpAllowlist(): Promise<void> {
     const result = await this.runCommand(["mcp", "list", "--json"], 256 * 1024);
     assertSupportAutopilotMcpProfile(readSingleCodexCommandOutput(result), {
+      environment: {
+        adminApiBaseUrl: this.config.adminApiBaseUrl,
+        credentialBlobPath: this.config.credentialBlobPath,
+      },
       mcpEntryPath: this.config.mcpLauncherPath,
       nodeExecutablePath: this.config.nodeExecutablePath,
     });
@@ -120,18 +124,24 @@ export class CodexShadowPreflight {
         continue;
       }
       const item = event.item;
+      if (item.type !== "mcp_tool_call") {
+        continue;
+      }
       if (
-        event.type === "item.completed"
-        && item.type === "mcp_tool_call"
-        && item.server === "support-autopilot"
-        && item.tool === "get_support_automation_health"
-        && item.status === "completed"
-        && (item.error === null || item.error === undefined)
+        item.server !== "support-autopilot"
+        || item.tool !== "get_support_automation_health"
+        || !(item.error === null || item.error === undefined)
       ) {
-        healthCalls += 1;
-      } else if (item.type === "mcp_tool_call") {
         throw new Error("unexpected smoke tool");
       }
+      if (event.type === "item.started" && item.status === "in_progress") {
+        continue;
+      }
+      if (event.type === "item.completed" && item.status === "completed") {
+        healthCalls += 1;
+        continue;
+      }
+      throw new Error("unexpected smoke tool");
     }
     if (healthCalls !== 1) {
       throw new Error("health smoke missing");

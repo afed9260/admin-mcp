@@ -260,6 +260,9 @@ export class SupportAutopilotReadinessDoctor {
     try {
       const result = await this.runCommand(["mcp", "list", "--json"], 256 * 1024);
       assertSupportAutopilotMcpProfile(readSingleCodexCommandOutput(result), {
+        environment: {
+          credentialBlobPath: this.config.credentialBlobPath!,
+        },
         mcpEntryPath: this.config.mcpLauncherPath!,
         nodeExecutablePath: this.config.nodeExecutablePath!,
       });

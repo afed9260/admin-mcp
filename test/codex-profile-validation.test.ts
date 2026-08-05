@@ -10,6 +10,14 @@ const expected = {
   nodeExecutablePath: "C:\\Program Files\\nodejs\\node.exe",
 };
 
+const runtimeExpected = {
+  ...expected,
+  environment: {
+    adminApiBaseUrl: "https://admin.example.test/new-admin",
+    credentialBlobPath: "C:\\ServiceSecrets\\support-autopilot.dpapi",
+  },
+};
+
 function profile(transportOverrides: Record<string, unknown> = {}) {
   return JSON.stringify([{
     enabled: true,
@@ -31,6 +39,39 @@ describe("Codex profile validation", () => {
     expect(() => assertCodexVersionOutput("codex-cli 0.146.0")).not.toThrow();
     expect(() => assertChatGptLoginOutput("Logged in using ChatGPT")).not.toThrow();
     expect(() => assertSupportAutopilotMcpProfile(profile(), expected)).not.toThrow();
+  });
+
+  it("accepts only the exact reviewed non-secret production MCP environment", () => {
+    expect(() => assertSupportAutopilotMcpProfile(profile({
+      env: {
+        ADMIN_API_BASE_URL: runtimeExpected.environment.adminApiBaseUrl,
+        SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: runtimeExpected.environment.credentialBlobPath,
+      },
+    }), runtimeExpected)).not.toThrow();
+  });
+
+  it.each([
+    ["extra key", {
+      ADMIN_API_BASE_URL: runtimeExpected.environment.adminApiBaseUrl,
+      EXTRA: "forbidden",
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: runtimeExpected.environment.credentialBlobPath,
+    }],
+    ["plaintext token", {
+      ADMIN_API_BASE_URL: runtimeExpected.environment.adminApiBaseUrl,
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: runtimeExpected.environment.credentialBlobPath,
+      SUPPORT_AUTOPILOT_SERVICE_TOKEN: "forbidden",
+    }],
+    ["wrong URL", {
+      ADMIN_API_BASE_URL: "https://other.example.test/new-admin",
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: runtimeExpected.environment.credentialBlobPath,
+    }],
+    ["wrong credential path", {
+      ADMIN_API_BASE_URL: runtimeExpected.environment.adminApiBaseUrl,
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: "C:\\Other\\token.dpapi",
+    }],
+  ])("rejects production MCP environment with %s", (_name, env) => {
+    expect(() => assertSupportAutopilotMcpProfile(profile({ env }), runtimeExpected))
+      .toThrow("CODEX_MCP_PROFILE_INVALID");
   });
 
   it.each([
