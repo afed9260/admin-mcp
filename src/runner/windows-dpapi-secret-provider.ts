@@ -14,7 +14,7 @@ const DPAPI_SCRIPT = [
   "$ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)",
   "try {[Console]::Out.Write([Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr))}",
   "finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}",
-].join(";");
+].join("\n");
 
 export class WindowsDpapiSecretProvider {
   constructor(private readonly execute: ExecuteFile = executeFile) {}
