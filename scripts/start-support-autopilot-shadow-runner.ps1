@@ -3,6 +3,7 @@ param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
   [string]$NodeExecutable = '',
   [switch]$AllowPendingPromotion,
+  [switch]$SupervisorOwnedLock,
   [switch]$PlanOnly
 )
 
@@ -18,6 +19,7 @@ $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
 $EntryPoint = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-shadow-main.js'
 $StateRoot = Join-Path $InstallRoot 'state'
 $StatePath = Join-Path $StateRoot 'credential-rotation.json'
+$LockPath = Join-Path $StateRoot 'credential-rotation.lock'
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $SupervisorMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-credential-supervisor-main.js'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
@@ -47,6 +49,28 @@ if ($PlanOnly) {
   exit 0
 }
 
+if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
+  New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
+}
+$lockStream = $null
+if (-not $SupervisorOwnedLock) {
+  try {
+    $lockStream = [IO.File]::Open(
+      $LockPath,
+      [IO.FileMode]::OpenOrCreate,
+      [IO.FileAccess]::ReadWrite,
+      [IO.FileShare]::None
+    )
+  }
+  catch {
+    [pscustomobject]@{ reason = 'rotation_lock_held'; started = $false } |
+      ConvertTo-Json -Compress
+    exit 0
+  }
+}
+
+try {
+$existing = @(Get-SupportAutopilotRunnerProcess)
 if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
   [pscustomobject]@{ reason = 'credential_state_missing'; started = $false } |
     ConvertTo-Json -Compress
@@ -83,10 +107,6 @@ if ($existing.Count -gt 0) {
     started = $false
   } | ConvertTo-Json -Compress
   exit 0
-}
-
-if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
-  New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
 }
 
 $AttestationPath = Join-Path $StateRoot 'privacy-attestation.json'
@@ -134,3 +154,9 @@ $process = Start-Process `
   processId = $process.Id
   started = $true
 } | ConvertTo-Json -Compress
+}
+finally {
+  if ($null -ne $lockStream) {
+    $lockStream.Dispose()
+  }
+}

@@ -23,6 +23,10 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("rotation_pending");
     expect(source).toContain("candidate_promoted");
     expect(source).toContain("[switch]$AllowPendingPromotion");
+    expect(source).toContain("[switch]$SupervisorOwnedLock");
+    expect(source).toContain("credential-rotation.lock");
+    expect(source).toContain("[IO.FileShare]::None");
+    expect(source).toContain("rotation_lock_held");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
   });

@@ -146,7 +146,8 @@ function Start-Runner {
     '-ExecutionPolicy', 'Bypass',
     '-File', $StartScript,
     '-InstallRoot', $InstallRoot,
-    '-NodeExecutable', $NodeExecutable
+    '-NodeExecutable', $NodeExecutable,
+    '-SupervisorOwnedLock'
   )
   if ($PromotionMode) {
     $arguments += '-AllowPendingPromotion'
@@ -180,8 +181,15 @@ function Wait-RunnerReady {
   do {
     Start-Sleep -Seconds 2
     $running = @(Get-ExactRunnerProcess)
-    $readyLogged = (Test-Path -LiteralPath $stderrPath -PathType Leaf) -and
-      [IO.File]::ReadAllText($stderrPath).Contains($readyEvent)
+    $readyLogged = $false
+    if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
+      try {
+        $readyLogged = [IO.File]::ReadAllText($stderrPath).Contains($readyEvent)
+      }
+      catch [IO.IOException] {
+        $readyLogged = $false
+      }
+    }
     if ($running.Count -eq 1 -and $readyLogged) {
       Get-QueueHealth | Out-Null
       return
@@ -309,12 +317,23 @@ if ($null -eq (Get-Command gh.exe -ErrorAction SilentlyContinue)) {
 
 $lockStream = $null
 try {
-  $lockStream = [IO.File]::Open(
-    $LockPath,
-    [IO.FileMode]::OpenOrCreate,
-    [IO.FileAccess]::ReadWrite,
-    [IO.FileShare]::None
-  )
+  $lockDeadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
+  do {
+    try {
+      $lockStream = [IO.File]::Open(
+        $LockPath,
+        [IO.FileMode]::OpenOrCreate,
+        [IO.FileAccess]::ReadWrite,
+        [IO.FileShare]::None
+      )
+    }
+    catch [IO.IOException] {
+      Start-Sleep -Milliseconds 500
+    }
+  } while ($null -eq $lockStream -and [DateTimeOffset]::UtcNow -lt $lockDeadline)
+  if ($null -eq $lockStream) {
+    throw 'credential_rotation_lock_unavailable'
+  }
 
   $decisionArguments = @(
     'decision',
