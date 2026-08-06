@@ -32,14 +32,23 @@ describe("Windows support autopilot lifecycle scripts", () => {
 
   it("starts one exact hidden runner process with redacted fixed log paths", () => {
     const source = script("start-support-autopilot-shadow-runner.ps1");
+    const launcherSource = readFileSync(
+      path.resolve("src", "runner", "support-autopilot-windows-process-launcher-main.ts"),
+      "utf8",
+    );
 
     expect(source).toContain("[regex]::Escape($NodeExecutable)");
     expect(source).toContain("[regex]::Escape($EntryPoint)");
     expect(source).toContain("Get-CimInstance -ClassName Win32_Process");
     expect(source).not.toMatch(/CommandLine\s+-like/i);
-    expect(source).toMatch(/-WindowStyle\s+Hidden/);
+    expect(source).toContain("support-autopilot-windows-process-launcher-main.js");
+    expect(launcherSource).toContain("detached: true");
+    expect(launcherSource).toContain("windowsHide: true");
+    expect(launcherSource).toContain("child.unref()");
     expect(source).toContain("shadow-runner.stdout.log");
     expect(source).toContain("shadow-runner.stderr.log");
+    expect(source).toContain("shadow-runner.stdin");
+    expect(launcherSource).toContain("stdio: [stdinFd, stdoutFd, stderrFd]");
     expect(source).not.toContain("Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN");
     expect(source).not.toContain("Remove-Item Env:ADMIN_API_TOKEN");
     expect(source).toContain("rotation_pending");
@@ -181,6 +190,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     for (const name of [
       "support-autopilot-credential-supervisor-main.js",
       "support-autopilot-credential-supervisor.js",
+      "support-autopilot-windows-process-launcher-main.js",
       "windows-dpapi-secret-provider.js",
     ]) {
       cpSync(path.resolve("dist", "runner", name), path.join(runnerRoot, name));
@@ -190,12 +200,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
       path.join(fixtures, "fake-health.cjs"),
       path.join(runnerRoot, "support-autopilot-local-health-main.js"),
     );
-    cpSync(
-      path.join(fixtures, "fake-start-runner.ps1"),
-      path.join(scriptRoot, "start-support-autopilot-shadow-runner.ps1"),
-    );
     for (const name of [
       "new-support-autopilot-credential.ps1",
+      "start-support-autopilot-shadow-runner.ps1",
       "stop-support-autopilot-shadow-runner.ps1",
       "support-autopilot-windows-security.ps1",
     ]) {
@@ -245,6 +252,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
     });
     try {
       await new Promise((resolve) => setTimeout(resolve, 300));
+      const initialHeartbeat = existsSync(fakeHeartbeatPath)
+        ? readFileSync(fakeHeartbeatPath, "utf8").trim()
+        : "missing";
       const result = spawnSync("powershell.exe", [
         "-NoProfile",
         "-NonInteractive",
@@ -272,10 +282,14 @@ describe("Windows support autopilot lifecycle scripts", () => {
       const eventPath = path.join(stateRoot, "credential-rotation.events.jsonl");
       const redactedEvents = existsSync(eventPath) ? readFileSync(eventPath, "utf8") : "";
       const journal = readFileSync(path.join(stateRoot, "credential-rotation.json"), "utf8");
+      const finalHeartbeat = existsSync(fakeHeartbeatPath)
+        ? readFileSync(fakeHeartbeatPath, "utf8").trim()
+        : "missing";
       expect(
         result.status,
         `${result.stderr}\nstdout=${result.stdout}\nevents=${redactedEvents}\n` +
-          `journal=${journal}\nfakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
+          `journal=${journal}\ninitialHeartbeat=${initialHeartbeat}\n` +
+          `finalHeartbeat=${finalHeartbeat}\nfakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
       ).toBe(0);
       expect(JSON.parse(result.stdout.trim())).toMatchObject({
         outcome: "rotated",
