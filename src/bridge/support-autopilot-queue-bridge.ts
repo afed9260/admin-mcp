@@ -22,6 +22,7 @@ export interface SupportAutopilotQueueBridgeOptions {
   initialBackoffMs?: number;
   logger?: (event: SupportQueueBridgeEvent) => void;
   maxBackoffMs?: number;
+  shouldStop?: () => boolean;
 }
 
 const ACTIVE_POLL_DELAY_MS = 1_000;
@@ -32,6 +33,7 @@ export class SupportAutopilotQueueBridge {
   private readonly initialBackoffMs: number;
   private readonly logger: (event: SupportQueueBridgeEvent) => void;
   private readonly maxBackoffMs: number;
+  private readonly shouldStop: () => boolean;
   private consecutiveFailures = 0;
   private inFlight: Promise<SupportQueueBridgeTickResult> | undefined;
   private stopped = false;
@@ -53,10 +55,12 @@ export class SupportAutopilotQueueBridge {
       throw new Error("maxBackoffMs must be greater than or equal to initialBackoffMs");
     }
     this.logger = options.logger ?? (() => undefined);
+    this.shouldStop = options.shouldStop ?? (() => false);
   }
 
   tick(): Promise<SupportQueueBridgeTickResult> {
-    if (this.stopped) {
+    if (this.stopped || this.shouldStop()) {
+      this.stopped = true;
       return Promise.resolve({ outcome: "stopped", nextDelayMs: 0 });
     }
     if (this.inFlight) {
@@ -99,6 +103,11 @@ export class SupportAutopilotQueueBridge {
             Math.max(MIN_IDLE_DELAY_MS, availability.retryAfterMs),
           ),
         };
+      }
+
+      if (this.shouldStop()) {
+        this.stopped = true;
+        return { outcome: "stopped", nextDelayMs: 0 };
       }
 
       this.log({ eventCode: "bridge_worker_started" });

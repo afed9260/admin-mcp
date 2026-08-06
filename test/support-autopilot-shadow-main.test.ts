@@ -91,4 +91,51 @@ describe("runSupportAutopilotShadowMain", () => {
     })).rejects.toThrow("SUPPORT_AUTOPILOT_SHADOW_MAIN_FAILED");
     expect(read).not.toHaveBeenCalled();
   });
+
+  it("acknowledges readiness only after the first successful availability heartbeat", async () => {
+    const abort = new AbortController();
+    const events: SupportAutopilotShadowMainEvent[] = [];
+    const post = vi.fn(async () => {
+      expect(events).not.toContainEqual({ eventCode: "shadow_runner_ready" });
+      abort.abort();
+      return { retryAfterMs: 5_000, workAvailable: false };
+    });
+
+    await runSupportAutopilotShadowMain({}, {
+      apiClientFactory: () => ({ post }),
+      loadConfig: () => config,
+      logger: (event) => events.push(event),
+      preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+      secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+      signal: abort.signal,
+    });
+
+    expect(events).toContainEqual({ eventCode: "shadow_runner_ready" });
+  });
+
+  it("drains before starting new work when a stop is requested after availability", async () => {
+    const events: SupportAutopilotShadowMainEvent[] = [];
+    const runOne = vi.fn();
+    let drainRequested = false;
+
+    await runSupportAutopilotShadowMain({}, {
+      apiClientFactory: () => ({
+        post: vi.fn(async () => {
+          drainRequested = true;
+          return { retryAfterMs: 0, workAvailable: true };
+        }),
+      }),
+      budget: { reserve: vi.fn().mockResolvedValue(true) },
+      drainRequested: () => drainRequested,
+      loadConfig: () => config,
+      logger: (event) => events.push(event),
+      preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+      secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+      worker: { runOne },
+    });
+
+    expect(runOne).not.toHaveBeenCalled();
+    expect(events).toContainEqual({ eventCode: "shadow_runner_ready" });
+    expect(events).toContainEqual({ eventCode: "shadow_runner_stopped", tickCount: 1 });
+  });
 });
