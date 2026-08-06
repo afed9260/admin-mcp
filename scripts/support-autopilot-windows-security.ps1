@@ -25,7 +25,20 @@ function Set-SupportAutopilotCurrentUserAcl {
     $inheritance = [Security.AccessControl.InheritanceFlags]::None
     $propagation = [Security.AccessControl.PropagationFlags]::None
   }
-  $acl.SetOwner($account)
+  $currentAcl = Get-Acl -LiteralPath $resolvedPath
+  $currentRules = @($currentAcl.Access)
+  if (
+    $currentAcl.AreAccessRulesProtected -and
+    $currentRules.Count -eq 1 -and
+    $currentRules[0].IdentityReference.Value -ieq $identity -and
+    $currentRules[0].AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
+    ($currentRules[0].FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -eq
+      [Security.AccessControl.FileSystemRights]::FullControl -and
+    $currentRules[0].InheritanceFlags -eq $inheritance -and
+    $currentRules[0].PropagationFlags -eq $propagation
+  ) {
+    return
+  }
   $acl.SetAccessRuleProtection($true, $false)
   $rule = [Security.AccessControl.FileSystemAccessRule]::new(
     $account,

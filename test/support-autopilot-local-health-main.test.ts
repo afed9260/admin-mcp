@@ -57,6 +57,7 @@ describe("runSupportAutopilotLocalHealth", () => {
       pendingJobs: 2,
       privacyGatePassed: true,
       reachable: true,
+      runnerFresh: true,
       runnerReady: true,
       shadowModeEnabled: true,
     });
@@ -64,6 +65,25 @@ describe("runSupportAutopilotLocalHealth", () => {
     expect(read).toHaveBeenCalledWith(enabledConfig.credentialBlobPath);
     expect(apiClientFactory).toHaveBeenCalledWith(enabledConfig, "raw-service-token");
     expect(get).toHaveBeenCalledWith("/support-automation/health");
+  });
+
+  it("fails the readiness gate for a stale or future runner heartbeat", async () => {
+    for (const runnerLastSeenAt of [
+      "2026-08-06T08:58:59.999Z",
+      "2026-08-06T09:00:01.000Z",
+      null,
+    ]) {
+      await expect(runSupportAutopilotLocalHealth({}, {
+        apiClientFactory: () => ({
+          get: vi.fn().mockResolvedValue({ ...validHealth, runnerLastSeenAt }),
+        }),
+        loadConfig: () => enabledConfig,
+        secretProvider: { read: vi.fn().mockResolvedValue("raw-service-token") },
+      })).resolves.toMatchObject({
+        gatesReady: false,
+        runnerFresh: false,
+      });
+    }
   });
 
   it("reports false readiness when a server gate or attestation does not match", async () => {

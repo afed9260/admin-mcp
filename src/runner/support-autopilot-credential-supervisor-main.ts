@@ -4,13 +4,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   credentialTokenMatchesDigest,
+  credentialWindowStatus,
   type CredentialRotationRecoveryAction,
   locateCredentialRotationRun,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
   planCredentialRotationRecovery,
   selectCredentialRotationRun,
-  shouldRotateCredential,
 } from "./support-autopilot-credential-supervisor.js";
 import { WindowsDpapiSecretProvider } from "./windows-dpapi-secret-provider.js";
 
@@ -27,7 +27,7 @@ export type CredentialSupervisorCommandResult =
   | { found: false }
   | { matches: true }
   | { status: string; workflowRunId: number }
-  | { pendingRotation: boolean; rotate: boolean; seedRequired?: true }
+  | { expired?: boolean; pendingRotation: boolean; rotate: boolean; seedRequired?: true }
   | { valid: true }
   | { workflowRunId: number };
 
@@ -55,9 +55,11 @@ export async function runCredentialSupervisorCommand(
       }
       const nowRaw = options.get("now");
       const now = nowRaw === undefined ? new Date() : canonicalDate(nowRaw);
+      const window = credentialWindowStatus(state.activeCredential, now);
       return {
+        expired: window.expired,
         pendingRotation: state.pendingRotation !== null,
-        rotate: shouldRotateCredential(state.activeCredential, now),
+        rotate: window.rotate,
       };
     }
 
@@ -124,7 +126,7 @@ export async function runCredentialSupervisorCommand(
     }
 
     if (command === "locate-run" || command === "probe-run" || command === "select-run") {
-      assertOnlyOptions(options, ["expected-sha", "inventory", "request-id"]);
+      assertOnlyOptions(options, ["expected-ref", "expected-sha", "inventory", "request-id"]);
       const select = command === "locate-run" || command === "probe-run"
         ? locateCredentialRotationRun
         : selectCredentialRotationRun;
@@ -133,6 +135,7 @@ export async function runCredentialSupervisorCommand(
         run = select(
           await readJsonFile(requiredOption(options, "inventory")),
           {
+            expectedHeadRef: requiredOption(options, "expected-ref"),
             expectedHeadSha: requiredOption(options, "expected-sha"),
             requestId: requiredOption(options, "request-id"),
           },

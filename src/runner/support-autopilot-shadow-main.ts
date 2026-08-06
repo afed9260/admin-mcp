@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
 import { SupportAutopilotApiClient } from "../backend/support-autopilot-api-client.js";
 import { SupportAutopilotQueueBridge, type SupportQueueBridgeEvent } from "../bridge/support-autopilot-queue-bridge.js";
 import { CodexShadowPreflight } from "./codex-shadow-preflight.js";
@@ -24,6 +25,7 @@ export type SupportAutopilotShadowMainEvent =
 export interface SupportAutopilotShadowMainDependencies {
   apiClientFactory?: (config: EnabledConfig, token: string) => ApiClient;
   budget?: Pick<DailyInvocationBudget, "reserve">;
+  drainRequested?: () => boolean;
   loadConfig?: (environment: Record<string, string | undefined>) => SupportAutopilotShadowRunnerConfig;
   logger?: (event: SupportAutopilotShadowMainEvent) => void;
   preflight?: Pick<CodexShadowPreflight, "run">;
@@ -54,7 +56,6 @@ export async function runSupportAutopilotShadowMain(
   let ticks = 0;
   try {
     await preflight.run();
-    log(logger, { eventCode: "shadow_runner_ready" });
     const token = await secretProvider.read(config.credentialBlobPath);
     const client = dependencies.apiClientFactory?.(config, token)
       ?? new SupportAutopilotApiClient({ baseUrl: config.adminApiBaseUrl, token });
@@ -65,6 +66,11 @@ export async function runSupportAutopilotShadowMain(
       processRunner,
       (event) => log(logger, event),
     );
+    const drainRequested = dependencies.drainRequested ?? (() => {
+      const requestPath = environment.SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH;
+      return typeof requestPath === "string" && requestPath.length > 0 && existsSync(requestPath);
+    });
+    let readyLogged = false;
     bridge = new SupportAutopilotQueueBridge(
       {
         getAvailability: async () => {
@@ -72,7 +78,12 @@ export async function runSupportAutopilotShadowMain(
             "/support-automation/work-availability",
             { workerId: config.workerId },
           );
-          return parseAvailability(response);
+          const availability = parseAvailability(response);
+          if (!readyLogged) {
+            readyLogged = true;
+            log(logger, { eventCode: "shadow_runner_ready" });
+          }
+          return availability;
         },
       },
       {
@@ -84,11 +95,11 @@ export async function runSupportAutopilotShadowMain(
           await worker.runOne();
         },
       },
-      { logger: (event) => log(logger, event) },
+      { logger: (event) => log(logger, event), shouldStop: drainRequested },
     );
 
     const sleep = dependencies.sleep ?? abortableSleep;
-    while (!signal.aborted) {
+    while (!signal.aborted && !drainRequested()) {
       const result = await bridge.tick();
       ticks += 1;
       if (result.outcome === "stopped" || signal.aborted) {

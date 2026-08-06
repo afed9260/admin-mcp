@@ -92,7 +92,7 @@ $definitions = @(
     timeLimit = 'PT5M'
   },
   [pscustomobject]@{
-    interval = 'PT1H'
+    interval = 'PT15M'
     name = $SupervisorTaskName
     script = $SupervisorScript
     timeLimit = 'PT50M'

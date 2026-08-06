@@ -24,6 +24,9 @@ $StatePath = Join-Path $StateRoot 'credential-rotation.json'
 $LockPath = Join-Path $StateRoot 'credential-rotation.lock'
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $SupervisorMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-credential-supervisor-main.js'
+$HealthMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-local-health-main.js'
+$StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-runner.ps1'
+$DrainRequestPath = Join-Path $StateRoot 'shadow-runner.drain'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
 $StderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
@@ -105,18 +108,25 @@ if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
   exit 0
 }
 Set-SupportAutopilotCurrentUserAcl -Path $StatePath
-foreach ($requiredPath in @($NodeExecutable, $EntryPoint, $SupervisorMain)) {
+foreach ($requiredPath in @(
+  $NodeExecutable,
+  $EntryPoint,
+  $SupervisorMain,
+  $HealthMain,
+  $StopScript
+)) {
   if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
     throw "required runner file is missing"
   }
 }
-$validation = & $NodeExecutable $SupervisorMain `
-  validate-state `
+$decisionOutput = & $NodeExecutable $SupervisorMain `
+  decision `
   --state $StatePath `
   --credential-root $CredentialRoot 2>$null
 if ($LASTEXITCODE -ne 0) {
   throw 'credential rotation state is invalid'
 }
+$credentialDecision = ($decisionOutput | Out-String).Trim() | ConvertFrom-Json
 $rotationState = Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8 |
   ConvertFrom-Json
 if ($null -eq $rotationState.activeCredential) {
@@ -124,23 +134,25 @@ if ($null -eq $rotationState.activeCredential) {
     ConvertTo-Json -Compress
   exit 0
 }
+$promotionAllowed = $null -ne $rotationState.pendingRotation -and
+  $AllowPendingPromotion -and
+  $rotationState.pendingRotation.stage -eq 'candidate_promoted'
+$effectiveCredentialExpired = $credentialDecision.expired -eq $true
+if ($promotionAllowed) {
+  $effectiveCredentialExpired = [DateTimeOffset]::UtcNow -ge
+    ([DateTimeOffset]$rotationState.pendingRotation.expiresAt)
+}
+if ($effectiveCredentialExpired) {
+  [pscustomobject]@{ reason = 'credential_expired'; started = $false } |
+    ConvertTo-Json -Compress
+  exit 0
+}
 if ($null -ne $rotationState.pendingRotation) {
-  $promotionAllowed = $AllowPendingPromotion -and
-    $rotationState.pendingRotation.stage -eq 'candidate_promoted'
   if (-not $promotionAllowed) {
     [pscustomobject]@{ reason = 'rotation_pending'; started = $false } |
       ConvertTo-Json -Compress
     exit 0
   }
-}
-
-if ($existing.Count -gt 0) {
-  [pscustomobject]@{
-    processIds = @($existing.ProcessId)
-    reason = 'already_running'
-    started = $false
-  } | ConvertTo-Json -Compress
-  exit 0
 }
 
 $AttestationPath = Join-Path $StateRoot 'privacy-attestation.json'
@@ -167,8 +179,48 @@ $env:SUPPORT_AUTOPILOT_WORKER_ID = 'arkadiy.pro.shadow.1'
 $env:SUPPORT_AUTOPILOT_DAILY_BUDGET = '100'
 $env:SUPPORT_AUTOPILOT_PROCESS_TIMEOUT_MS = '600000'
 $env:SUPPORT_AUTOPILOT_BUDGET_STATE_PATH = Join-Path $StateRoot 'daily-budget.json'
+$env:SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH = $DrainRequestPath
 $env:SUPPORT_AUTOPILOT_MCP_LAUNCHER_PATH = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-mcp-launcher.js'
 $env:ADMIN_API_BASE_URL = 'https://malikbot.ru/new-admin'
+
+if ($existing.Count -gt 1) {
+  throw 'multiple_exact_runner_processes'
+}
+if ($existing.Count -eq 1) {
+  $healthOutput = & $NodeExecutable $HealthMain 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    [pscustomobject]@{ reason = 'runner_health_unavailable'; started = $false } |
+      ConvertTo-Json -Compress
+    exit 0
+  }
+  $health = ($healthOutput | Out-String).Trim() | ConvertFrom-Json
+  if ($health.runnerFresh -eq $true) {
+    [pscustomobject]@{
+      processIds = @($existing.ProcessId)
+      reason = 'already_running'
+      started = $false
+    } | ConvertTo-Json -Compress
+    exit 0
+  }
+  if ([long]$health.activeLeases -ne 0) {
+    [pscustomobject]@{ reason = 'stale_runner_has_active_work'; started = $false } |
+      ConvertTo-Json -Compress
+    exit 0
+  }
+  & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+    -File $StopScript `
+    -InstallRoot $InstallRoot `
+    -NodeExecutable $NodeExecutable `
+    -StopTimeoutSeconds 120 `
+    -ForceAfterTimeout | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'stale_runner_stop_failed'
+  }
+}
+
+if (Test-Path -LiteralPath $DrainRequestPath -PathType Leaf) {
+  Remove-Item -LiteralPath $DrainRequestPath -Force
+}
 
 [IO.File]::WriteAllText($StdoutPath, '', [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($StderrPath, '', [Text.UTF8Encoding]::new($false))

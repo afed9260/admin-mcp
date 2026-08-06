@@ -86,9 +86,11 @@ identity. Both use `InteractiveToken` and `LeastPrivilege`; neither stores a
 Windows password.
 
 - `Sdelka Support Autopilot Watchdog` runs at logon and every five minutes. It
-  starts exactly one reviewed runner process and refuses to start while a
-  credential rotation is pending.
-- `Sdelka Support Autopilot Credential Supervisor` runs at logon and hourly. It
+  starts exactly one reviewed runner process, refuses to start with an expired
+  credential or while a rotation is pending, and replaces an idle stale runner
+  only after the server confirms that it has no active lease.
+- `Sdelka Support Autopilot Credential Supervisor` runs at logon and every
+  fifteen minutes. It
   rotates only the dedicated support-autopilot service credential when fewer
   than six hours remain. It never reads or changes customer authentication,
   provider credentials, money, ticket state, or customer settings.
@@ -129,21 +131,34 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
 Export and inspect both task definitions after installation. Their arguments
 must contain only the reviewed script path and install root. The definitions
 must contain `InteractiveToken`, `LeastPrivilege`, `IgnoreNew`, and
-`StartWhenAvailable`, with five-minute and hourly repetition respectively.
+`StartWhenAvailable`, with five-minute and fifteen-minute repetition respectively.
 
 The supervisor requires all queue, privacy, attestation, and runner gates before
-starting a rotation. It checks `activeLeases` before stopping the runner and
-again after the process is stopped, when no new lease can be acquired. It
-defers or waits for lease drain instead of rotating through active work. It dispatches only
+starting a normal rotation. It checks `activeLeases` before stopping the runner,
+requests a graceful local drain, and checks again after the process exits. The
+runner checks the drain request before starting work and finishes an in-flight
+decision before exiting. The supervisor defers instead of rotating through
+active work. It dispatches only
 `support-autopilot-credential-rotation.yml` in
-`afed9260/ai-agent-backend`, correlates the exact request UUID and `main` SHA,
-waits for success, then atomically replaces the DPAPI blob while retaining one
+`afed9260/ai-agent-backend` from the immutable
+`support-autopilot-credential-rotation-v1` tag, correlates the exact request UUID,
+tag, and pinned SHA `ba167befdbded7e6235d192b5d3c81e336f09490`, waits for
+success, then atomically replaces the DPAPI blob while retaining one
 encrypted rollback blob. An orphan candidate created before its journal update
 is deleted and regenerated. A missing candidate after server acceptance causes
 a fresh candidate and a second guarded rotation; it is never replaced by a
 one-off local send. A confirmed failed workflow is recovered only when
 the old credential still passes the dedicated health boundary. Ambiguous state
 fails closed and remains in the journal for the next audited recovery attempt.
+Queued workflow runs are cancelled after a bounded wait; the old runner is
+restored only after the exact run is terminal and the old credential still
+passes its dedicated health boundary.
+
+If the computer was offline long enough for the dedicated credential to expire,
+the watchdog leaves the runner stopped. The supervisor waits thirty minutes
+after expiry so every possible 30-minute job lease has ended, then performs the
+same guarded rotation without relying on the expired credential. This path does
+not alter customer authentication or provider credentials.
 
 To remove only these two tasks without touching credentials or runner state:
 

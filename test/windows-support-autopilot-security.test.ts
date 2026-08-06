@@ -21,6 +21,7 @@ windowsDescribe("Windows support autopilot security helpers", () => {
         [
           ". $env:SUPPORT_AUTOPILOT_TEST_HELPER",
           "Set-SupportAutopilotCurrentUserAcl -Path $env:SUPPORT_AUTOPILOT_TEST_ROOT -Container",
+          "Set-SupportAutopilotCurrentUserAcl -Path $env:SUPPORT_AUTOPILOT_TEST_ROOT -Container",
           "Write-SupportAutopilotRedactedEvent -EventPath $env:SUPPORT_AUTOPILOT_TEST_EVENT -EventCode 'credential_rotation_stage' -Stage 'candidate_ready'",
           "$acl = Get-Acl -LiteralPath $env:SUPPORT_AUTOPILOT_TEST_EVENT",
           "$rules = @($acl.Access | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)",

@@ -30,7 +30,7 @@ Use two Windows Task Scheduler tasks under the current interactive identity.
    idempotent launcher. If the reviewed runner process already exists, it does
    nothing. Otherwise it starts the runner hidden with the isolated Codex home,
    empty runtime, DPAPI credential, privacy attestation, and redacted logs.
-2. **Credential supervisor** runs at logon and hourly. It reads only non-secret
+2. **Credential supervisor** runs at logon and every fifteen minutes. It reads only non-secret
    rotation metadata. When fewer than six hours remain, it performs the guarded
    rotation state machine described below. Otherwise it exits without network
    or process changes.
@@ -52,16 +52,16 @@ stage. It never stores the token.
 3. Query the dedicated support-automation health boundary using the current
    DPAPI credential. Continue only when `activeLeases=0` and the runner gates are
    ready.
-4. Stop the runner, verify that no reviewed runner process remains, and query
-   health again until `activeLeases=0`. This closes the lease race between the
-   first health read and process shutdown.
+4. Request a graceful runner drain. The runner checks the request before
+   starting work, finishes an in-flight decision, exits, and is followed by a
+   second `activeLeases=0` check.
 5. Generate a non-overwriting DPAPI candidate with the existing cryptographic
    generator. Persist only its digest and bounded issue/expiry timestamps.
 6. Persist `dispatch_prepared`, search for an already-created exact run after
    recovery, then dispatch the guarded production workflow with the digest,
    timestamps, and a random request id only when needed. The workflow run name includes that request id. The local
-   supervisor accepts exactly one completed successful run from `main` at the
-   expected commit SHA.
+   supervisor accepts exactly one completed successful run from the immutable
+   `support-autopilot-credential-rotation-v1` tag at its expected commit SHA.
 7. Atomically move the current canonical DPAPI blob to an encrypted backup and
    promote the candidate. If the promotion fails, retain the journal and retry
    recovery; never print either blob.
@@ -83,10 +83,12 @@ canonical UUID and a deterministic run name. No production mutation semantics
 change. The workflow still receives only the digest and timestamps and still
 changes only the four managed `SUPPORT_AUTOPILOT_*` values in Admin.
 
-The local supervisor records the default-branch SHA immediately before
-dispatch, searches by the exact run name, rejects zero or multiple matching
-runs after the bounded discovery window, and verifies `headSha`, `event`,
-terminal status, and conclusion before promoting the candidate.
+The local supervisor resolves the immutable workflow tag, searches by the exact
+run name, rejects zero or multiple matching runs after the bounded discovery
+window, and verifies `headBranch`, `headSha`, `event`, terminal status, and
+conclusion before promoting the candidate. Queued runs are cancelled after a
+bounded wait and the old runner is restored only after terminal failure and a
+successful old-credential health check.
 
 ## Local Files
 
@@ -98,6 +100,7 @@ All mutable files remain under `C:\Users\Arkadiy\.sdelka-support-autopilot`:
 - `state\credential-rotation.lock`: exclusive local lock;
 - `state\credential-rotation.events.jsonl`: redacted event codes only;
 - `state\shadow-runner.stderr.log`: existing redacted runner events.
+- `state\shadow-runner.drain`: non-secret graceful-stop request.
 
 User-only ACLs are required for the credential, state, and log paths. The empty
 runtime remains empty.
@@ -105,12 +108,13 @@ runtime remains empty.
 ## Failure Handling
 
 - Server unavailable, GitHub unavailable, or runner busy: no credential change;
-  retry on the next hourly trigger.
+  retry on the next fifteen-minute trigger.
 - Workflow failed: keep the canonical blob and restart the old runner.
 - Server accepted but local promotion/start failed: retain the journal and
   candidate for deterministic recovery.
-- Credential expired before recovery: runner stays stopped instead of looping
-  with invalid authentication; rotation remains retryable through GitHub.
+- Credential expired before recovery: runner stays stopped, waits thirty
+  minutes for the maximum lease lifetime, then rotates through GitHub without
+  requiring the expired credential.
 - Correlation ambiguity, changed workflow SHA, unexpected response shape, or
   plaintext token environment: fail closed and record a redacted blocker.
 
@@ -118,8 +122,9 @@ runtime remains empty.
 
 - Unit tests cover rotation timing, journal validation, interrupted-stage
   recovery, exact workflow-run correlation, and ambiguous/failing runs.
-- Static script tests enforce no raw-token argument/output path, exact scheduled
-  task principals/settings, absolute paths, and managed process matching.
+- Executable Windows tests exercise graceful drain and the complete journal,
+  DPAPI generation/promotion, correlated workflow, rollback, and restart path
+  with guarded local fakes. Static tests retain the no-secret and task checks.
 - Local acceptance installs the tasks, proves their definitions contain no
   secret, restarts the runner through the watchdog, and runs a no-rotation
   supervisor cycle against the current unexpired credential.

@@ -16,6 +16,7 @@ const canonicalIso = z.string().refine((value) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
 });
 const counter = z.number().int().nonnegative().safe();
+const RUNNER_HEARTBEAT_MAX_AGE_MS = 60_000;
 const healthSchema = z.object({
   activeLeases: counter,
   claimsEnabled: z.boolean(),
@@ -41,6 +42,7 @@ export interface SupportAutopilotLocalHealth {
   pendingJobs: number;
   privacyGatePassed: boolean;
   reachable: true;
+  runnerFresh: boolean;
   runnerReady: boolean;
   shadowModeEnabled: boolean;
 }
@@ -68,10 +70,17 @@ export async function runSupportAutopilotLocalHealth(
     const health = healthSchema.parse(
       await client.get<unknown>("/support-automation/health"),
     );
+    const runnerHeartbeatAgeMs = health.runnerLastSeenAt === null
+      ? null
+      : Date.parse(health.generatedAt) - Date.parse(health.runnerLastSeenAt);
+    const runnerFresh = runnerHeartbeatAgeMs !== null
+      && runnerHeartbeatAgeMs >= 0
+      && runnerHeartbeatAgeMs <= RUNNER_HEARTBEAT_MAX_AGE_MS;
     const gatesReady = health.claimsEnabled
       && health.jobCreationEnabled
       && health.privacyGatePassed
       && health.runnerReady
+      && runnerFresh
       && health.shadowModeEnabled
       && health.privacyAttestationId === config.privacyAttestationId;
 
@@ -83,6 +92,7 @@ export async function runSupportAutopilotLocalHealth(
       pendingJobs: health.pendingJobs,
       privacyGatePassed: health.privacyGatePassed,
       reachable: true,
+      runnerFresh,
       runnerReady: health.runnerReady,
       shadowModeEnabled: health.shadowModeEnabled,
     };

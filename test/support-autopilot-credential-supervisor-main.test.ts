@@ -26,6 +26,20 @@ describe("credential supervisor command boundary", () => {
       "--credential-root", ROOT,
       "--now", "2026-08-07T02:00:00.001Z",
     ], { readJsonFile })).resolves.toEqual({
+      expired: false,
+      pendingRotation: false,
+      rotate: true,
+    });
+  });
+
+  it("marks an expired credential for recovery without reading its blob", async () => {
+    await expect(runCredentialSupervisorCommand([
+      "decision",
+      "--state", "C:\\support-autopilot\\state\\rotation.json",
+      "--credential-root", ROOT,
+      "--now", "2026-08-07T08:00:00.000Z",
+    ], { readJsonFile: vi.fn().mockResolvedValue(activeState) })).resolves.toEqual({
+      expired: true,
       pendingRotation: false,
       rotate: true,
     });
@@ -110,7 +124,7 @@ describe("credential supervisor command boundary", () => {
       databaseId: 42,
       displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "completed",
     };
@@ -119,6 +133,7 @@ describe("credential supervisor command boundary", () => {
       "select-run",
       "--inventory", "C:\\support-autopilot\\state\\runs.json",
       "--request-id", REQUEST_ID,
+      "--expected-ref", "support-autopilot-credential-rotation-v1",
       "--expected-sha", HEAD_SHA,
     ], { readJsonFile: vi.fn().mockResolvedValue([run]) })).resolves.toEqual({
       workflowRunId: 42,
@@ -131,7 +146,7 @@ describe("credential supervisor command boundary", () => {
       databaseId: 42,
       displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "queued",
     };
@@ -140,6 +155,7 @@ describe("credential supervisor command boundary", () => {
       "locate-run",
       "--inventory", "C:\\support-autopilot\\state\\runs.json",
       "--request-id", REQUEST_ID,
+      "--expected-ref", "support-autopilot-credential-rotation-v1",
       "--expected-sha", HEAD_SHA,
     ], { readJsonFile: vi.fn().mockResolvedValue([run]) })).resolves.toEqual({
       status: "queued",
@@ -152,6 +168,7 @@ describe("credential supervisor command boundary", () => {
       "probe-run",
       "--inventory", "C:\\support-autopilot\\state\\runs.json",
       "--request-id", REQUEST_ID,
+      "--expected-ref", "support-autopilot-credential-rotation-v1",
       "--expected-sha", HEAD_SHA,
     ];
     await expect(runCredentialSupervisorCommand(args, {
@@ -163,7 +180,7 @@ describe("credential supervisor command boundary", () => {
       databaseId: 42,
       displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "queued",
     };

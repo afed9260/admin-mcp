@@ -2,6 +2,7 @@
 param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
   [string]$NodeExecutable = '',
+  [string]$GitHubCliPath = 'gh.exe',
   [switch]$ForceRotation,
   [string]$ConfirmForceRotation = '',
   [switch]$PlanOnly
@@ -12,6 +13,10 @@ Set-StrictMode -Version Latest
 
 $Repository = 'afed9260/ai-agent-backend'
 $Workflow = 'support-autopilot-credential-rotation.yml'
+$WorkflowRef = 'support-autopilot-credential-rotation-v1'
+$PinnedWorkflowSha = 'ba167befdbded7e6235d192b5d3c81e336f09490'
+$ProductionRunnerName = 'prod-server-runner'
+$ExpiredLeaseGraceMinutes = 30
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
   $NodeExecutable = Join-Path $env:ProgramFiles 'nodejs\node.exe'
@@ -69,22 +74,67 @@ function Invoke-SupervisorCommand {
 function Write-RotationState {
   param([Parameter(Mandatory = $true)]$State)
   $temporaryPath = Join-Path $StateRoot ('.credential-rotation-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+  $backupPath = Join-Path $StateRoot '.credential-rotation.previous.json'
   try {
     $json = $State | ConvertTo-Json -Depth 8 -Compress
     [IO.File]::WriteAllText($temporaryPath, $json, [Text.UTF8Encoding]::new($false))
     Set-SupportAutopilotCurrentUserAcl -Path $temporaryPath
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'credential_state_write' `
+      -Outcome 'temporary_protected'
     Invoke-SupervisorCommand @(
       'validate-state',
       '--state', $temporaryPath,
       '--credential-root', $CredentialRoot
     ) | Out-Null
-    if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
-      [IO.File]::Replace($temporaryPath, $StatePath, $null)
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'credential_state_write' `
+      -Outcome 'schema_validated'
+    try {
+      if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
+        if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+          Remove-Item -LiteralPath $backupPath -Force
+        }
+        [IO.File]::Replace($temporaryPath, $StatePath, $backupPath)
+      }
+      else {
+        Move-Item -LiteralPath $temporaryPath -Destination $StatePath
+      }
     }
-    else {
-      Move-Item -LiteralPath $temporaryPath -Destination $StatePath
+    catch [UnauthorizedAccessException] {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_state_write_failed' `
+        -Outcome 'replace_unauthorized'
+      throw
+    }
+    catch [IO.IOException] {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_state_write_failed' `
+        -Outcome 'replace_io'
+      throw
+    }
+    catch [ArgumentException] {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_state_write_failed' `
+        -Outcome 'replace_argument'
+      throw
     }
     Set-SupportAutopilotCurrentUserAcl -Path $StatePath
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'credential_state_write' `
+      -Outcome 'atomically_replaced'
+    if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+      try {
+        Remove-Item -LiteralPath $backupPath -Force
+      }
+      catch {}
+    }
   }
   finally {
     if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
@@ -132,6 +182,7 @@ function Set-RunnerEnvironment {
   $env:SUPPORT_AUTOPILOT_DAILY_BUDGET = '100'
   $env:SUPPORT_AUTOPILOT_PROCESS_TIMEOUT_MS = '600000'
   $env:SUPPORT_AUTOPILOT_BUDGET_STATE_PATH = Join-Path $StateRoot 'daily-budget.json'
+  $env:SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH = Join-Path $StateRoot 'shadow-runner.drain'
   $env:SUPPORT_AUTOPILOT_MCP_LAUNCHER_PATH = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-mcp-launcher.js'
   $env:ADMIN_API_BASE_URL = 'https://malikbot.ru/new-admin'
 }
@@ -235,17 +286,40 @@ function Wait-RunnerReady {
   throw 'runner_readiness_timeout'
 }
 
-function Get-MainSha {
-  $sha = (& gh.exe api "repos/$Repository/git/ref/heads/main" --jq '.object.sha' 2>$null |
+function Get-WorkflowSha {
+  $sha = (& $GitHubCliPath api "repos/$Repository/git/ref/tags/$WorkflowRef" --jq '.object.sha' 2>$null |
     Out-String).Trim()
-  if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') {
-    throw 'main_revision_unavailable'
+  if (
+    $LASTEXITCODE -ne 0 -or
+    $sha -notmatch '^[0-9a-f]{40}$' -or
+    $sha -ne $PinnedWorkflowSha
+  ) {
+    throw 'workflow_revision_unavailable'
   }
   return $sha
 }
 
+function Test-ProductionRunnerAvailable {
+  $json = & $GitHubCliPath api "repos/$Repository/actions/runners" 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    return $false
+  }
+  try {
+    $inventory = ($json | Out-String).Trim() | ConvertFrom-Json
+    $matches = @($inventory.runners | Where-Object {
+      $_.name -eq $ProductionRunnerName -and
+      $_.status -eq 'online' -and
+      $_.busy -eq $false
+    })
+    return $matches.Count -eq 1
+  }
+  catch {
+    return $false
+  }
+}
+
 function Save-WorkflowInventory {
-  $json = & gh.exe run list `
+  $json = & $GitHubCliPath run list `
     --repo $Repository `
     --workflow $Workflow `
     --event workflow_dispatch `
@@ -276,6 +350,7 @@ function Find-CorrelatedWorkflow {
       'probe-run',
       '--inventory', $InventoryPath,
       '--request-id', $RequestId,
+      '--expected-ref', $WorkflowRef,
       '--expected-sha', $ExpectedHeadSha
     )
     $foundProperty = $probe.PSObject.Properties['found']
@@ -305,22 +380,56 @@ function Complete-CorrelatedWorkflow {
   if ($null -eq $located -or [long]$located.workflowRunId -ne $WorkflowRunId) {
     throw 'correlated_workflow_changed'
   }
-  & gh.exe run watch ([string]$WorkflowRunId) --repo $Repository --exit-status 2>$null |
-    Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw 'correlated_workflow_failed'
-  }
-  Save-WorkflowInventory
-  $completed = Invoke-SupervisorCommand @(
-    'select-run',
-    '--inventory', $InventoryPath,
-    '--request-id', $RequestId,
-    '--expected-sha', $ExpectedHeadSha
-  )
-  if ([long]$completed.workflowRunId -ne $WorkflowRunId) {
-    throw 'correlated_workflow_changed'
-  }
-  return $WorkflowRunId
+  $queueDeadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
+  $overallDeadline = [DateTimeOffset]::UtcNow.AddMinutes(20)
+  $cancelRequested = $false
+  do {
+    Save-WorkflowInventory
+    $current = Invoke-SupervisorCommand @(
+      'locate-run',
+      '--inventory', $InventoryPath,
+      '--request-id', $RequestId,
+      '--expected-ref', $WorkflowRef,
+      '--expected-sha', $ExpectedHeadSha
+    )
+    if ([long]$current.workflowRunId -ne $WorkflowRunId) {
+      throw 'correlated_workflow_changed'
+    }
+    if ([string]$current.status -eq 'completed') {
+      try {
+        $completed = Invoke-SupervisorCommand @(
+          'select-run',
+          '--inventory', $InventoryPath,
+          '--request-id', $RequestId,
+          '--expected-ref', $WorkflowRef,
+          '--expected-sha', $ExpectedHeadSha
+        )
+      }
+      catch {
+        throw 'correlated_workflow_failed'
+      }
+      if ([long]$completed.workflowRunId -ne $WorkflowRunId) {
+        throw 'correlated_workflow_changed'
+      }
+      return $WorkflowRunId
+    }
+    $now = [DateTimeOffset]::UtcNow
+    $queueTimedOut = [string]$current.status -eq 'queued' -and $now -ge $queueDeadline
+    $overallTimedOut = $now -ge $overallDeadline
+    if (($queueTimedOut -or $overallTimedOut) -and -not $cancelRequested) {
+      & $GitHubCliPath run cancel ([string]$WorkflowRunId) --repo $Repository 2>$null |
+        Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        throw 'correlated_workflow_cancel_failed'
+      }
+      $cancelRequested = $true
+      $overallDeadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
+    }
+    elseif ($overallTimedOut -and $cancelRequested) {
+      throw 'correlated_workflow_ambiguous'
+    }
+    Start-Sleep -Seconds 5
+  } while ($true)
 }
 
 function Assert-CandidateDigest {
@@ -342,6 +451,7 @@ if ($PlanOnly) {
     installRoot = $InstallRoot
     planOnly = $true
     stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
+    workflowRef = $WorkflowRef
   } | ConvertTo-Json -Compress
   exit 0
 }
@@ -365,7 +475,7 @@ foreach ($requiredPath in @(
     throw 'required_supervisor_file_missing'
   }
 }
-if ($null -eq (Get-Command gh.exe -ErrorAction SilentlyContinue)) {
+if ($null -eq (Get-Command $GitHubCliPath -ErrorAction SilentlyContinue)) {
   throw 'github_cli_unavailable'
 }
 
@@ -407,6 +517,7 @@ try {
     '--credential-root', $CredentialRoot
   )
   $decision = Invoke-SupervisorCommand $decisionArguments
+  $expiredRecovery = $decision.expired -eq $true
   $seedRequired = $decision.PSObject.Properties['seedRequired']
   if ($null -ne $seedRequired -and $seedRequired.Value -eq $true) {
     throw 'credential_state_seed_required'
@@ -424,41 +535,96 @@ try {
   }
 
   $state = Get-RotationState
+  $auditedWorkflowSha = $null
   $candidateCreatedThisRun = $false
   $dispatchPreparedThisRun = $false
   while ($true) {
     if ($null -eq $state.pendingRotation) {
-      $health = Get-QueueHealth
-      Assert-QueueGatesReady $health
-      if ([long]$health.activeLeases -ne 0) {
+      if (-not (Test-ProductionRunnerAvailable)) {
         Write-SupportAutopilotRedactedEvent `
           -EventPath $EventPath `
           -EventCode 'credential_rotation_deferred' `
-          -Outcome 'active_lease' `
-          -ActiveLeases ([long]$health.activeLeases)
+          -Outcome 'production_runner_unavailable'
         [pscustomobject]@{
-          activeLeases = [long]$health.activeLeases
-          outcome = 'deferred_active_work'
+          outcome = 'deferred_production_runner_unavailable'
           rotated = $false
         } | ConvertTo-Json -Compress
         exit 0
       }
-      if (@(Get-ExactRunnerProcess).Count -ne 1) {
-        throw 'exact_runner_process_missing'
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_precheck' `
+        -Outcome 'production_runner_available'
+      $auditedWorkflowSha = Get-WorkflowSha
+
+      if ($expiredRecovery) {
+        $running = @(Get-ExactRunnerProcess)
+        if ($running.Count -gt 1) {
+          throw 'multiple_exact_runner_processes'
+        }
+        if ($running.Count -eq 1) {
+          Stop-Runner
+        }
+        $leaseGraceEndsAt = ([DateTimeOffset]$state.activeCredential.expiresAt).AddMinutes(
+          $ExpiredLeaseGraceMinutes
+        )
+        if ([DateTimeOffset]::UtcNow -lt $leaseGraceEndsAt) {
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'credential_rotation_deferred' `
+            -Outcome 'expired_lease_grace'
+          [pscustomobject]@{
+            outcome = 'deferred_expired_lease_grace'
+            rotated = $false
+          } | ConvertTo-Json -Compress
+          exit 0
+        }
       }
-      Stop-Runner
-      if (-not (Wait-PostStopLeaseDrain)) {
-        Start-Runner
-        Wait-RunnerReady
+      else {
+        $health = Get-QueueHealth
+        Assert-QueueGatesReady $health
         Write-SupportAutopilotRedactedEvent `
           -EventPath $EventPath `
-          -EventCode 'credential_rotation_deferred' `
-          -Outcome 'post_stop_active_lease'
-        [pscustomobject]@{
-          outcome = 'deferred_post_stop_active_work'
-          rotated = $false
-        } | ConvertTo-Json -Compress
-        exit 0
+          -EventCode 'credential_rotation_precheck' `
+          -Outcome 'queue_gates_ready'
+        if ([long]$health.activeLeases -ne 0) {
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'credential_rotation_deferred' `
+            -Outcome 'active_lease' `
+            -ActiveLeases ([long]$health.activeLeases)
+          [pscustomobject]@{
+            activeLeases = [long]$health.activeLeases
+            outcome = 'deferred_active_work'
+            rotated = $false
+          } | ConvertTo-Json -Compress
+          exit 0
+        }
+        if (@(Get-ExactRunnerProcess).Count -ne 1) {
+          throw 'exact_runner_process_missing'
+        }
+        Stop-Runner
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'credential_rotation_precheck' `
+          -Outcome 'runner_drained'
+        if (-not (Wait-PostStopLeaseDrain)) {
+          Start-Runner
+          Wait-RunnerReady
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'credential_rotation_deferred' `
+            -Outcome 'post_stop_active_lease'
+          [pscustomobject]@{
+            outcome = 'deferred_post_stop_active_work'
+            rotated = $false
+          } | ConvertTo-Json -Compress
+          exit 0
+        }
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'credential_rotation_precheck' `
+          -Outcome 'post_stop_no_active_lease'
       }
       $requestId = [Guid]::NewGuid().ToString('D').ToLowerInvariant()
       Write-RotationState (New-StateForStage $state ([ordered]@{
@@ -558,7 +724,12 @@ try {
       Assert-CandidateDigest `
         -CandidatePath ([string]$pending.candidatePath) `
         -Digest ([string]$pending.tokenSha256)
-      $expectedHeadSha = Get-MainSha
+      $expectedHeadSha = if ($null -ne $auditedWorkflowSha) {
+        $auditedWorkflowSha
+      }
+      else {
+        Get-WorkflowSha
+      }
       Write-RotationState (New-StateForStage $state ([ordered]@{
         stage = 'dispatch_prepared'
         requestId = [string]$pending.requestId
@@ -608,9 +779,9 @@ try {
           -WaitMinutes 5
       }
       if ($null -eq $located) {
-        & gh.exe workflow run $Workflow `
+        & $GitHubCliPath workflow run $Workflow `
         --repo $Repository `
-        --ref main `
+        --ref $WorkflowRef `
         -f 'action=enable' `
         -f "request_id=$($pending.requestId)" `
         -f "token_sha256=$($pending.tokenSha256)" `
@@ -662,11 +833,23 @@ try {
         if ($_.Exception.Message -ne 'correlated_workflow_failed') {
           throw
         }
-        Get-QueueHealth | Out-Null
         if (Test-Path -LiteralPath $pending.candidatePath -PathType Leaf) {
           Remove-Item -LiteralPath $pending.candidatePath -Force
         }
         Write-RotationState (New-StateForStage $state $null)
+        if ($expiredRecovery) {
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'credential_rotation_recovered' `
+            -RequestId ([string]$pending.requestId) `
+            -Outcome 'remote_failed_expired_retry'
+          [pscustomobject]@{
+            outcome = 'remote_failed_expired_retry'
+            rotated = $false
+          } | ConvertTo-Json -Compress
+          exit 0
+        }
+        Get-QueueHealth | Out-Null
         Start-Runner
         Wait-RunnerReady
         Write-SupportAutopilotRedactedEvent `

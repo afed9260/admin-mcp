@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
   credentialTokenMatchesDigest,
+  credentialWindowStatus,
   locateCredentialRotationRun,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
@@ -48,6 +49,17 @@ describe("support autopilot credential supervisor policy", () => {
       metadata,
       new Date("2026-08-07T02:00:00.001Z"),
     )).toBe(true);
+  });
+
+  it("distinguishes a valid rotation window from an expired credential", () => {
+    const metadata = { issuedAt: ISSUED_AT, expiresAt: EXPIRES_AT };
+
+    expect(credentialWindowStatus(metadata, new Date("2026-08-07T02:00:00.000Z")))
+      .toEqual({ expired: false, rotate: false });
+    expect(credentialWindowStatus(metadata, new Date("2026-08-07T02:00:00.001Z")))
+      .toEqual({ expired: false, rotate: true });
+    expect(credentialWindowStatus(metadata, new Date(EXPIRES_AT)))
+      .toEqual({ expired: true, rotate: true });
   });
 
   it("enforces stage-specific recovery fields in the non-secret journal", () => {
@@ -187,13 +199,14 @@ describe("support autopilot credential supervisor policy", () => {
       databaseId: 42,
       displayTitle: title,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "completed",
       conclusion: "success",
     };
 
     expect(selectCredentialRotationRun([run], {
+      expectedHeadRef: "support-autopilot-credential-rotation-v1",
       requestId: REQUEST_ID,
       expectedHeadSha: HEAD_SHA,
     })).toEqual(run);
@@ -205,12 +218,13 @@ describe("support autopilot credential supervisor policy", () => {
       databaseId: 42,
       displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "in_progress",
     };
 
     expect(locateCredentialRotationRun([run], {
+      expectedHeadRef: "support-autopilot-credential-rotation-v1",
       requestId: REQUEST_ID,
       expectedHeadSha: HEAD_SHA,
     })).toEqual(run);
@@ -222,12 +236,16 @@ describe("support autopilot credential supervisor policy", () => {
       databaseId: 42,
       displayTitle: title,
       event: "workflow_dispatch",
-      headBranch: "main",
+      headBranch: "support-autopilot-credential-rotation-v1",
       headSha: HEAD_SHA,
       status: "completed",
       conclusion: "success",
     };
-    const expected = { requestId: REQUEST_ID, expectedHeadSha: HEAD_SHA };
+    const expected = {
+      expectedHeadRef: "support-autopilot-credential-rotation-v1",
+      requestId: REQUEST_ID,
+      expectedHeadSha: HEAD_SHA,
+    };
 
     expect(() => selectCredentialRotationRun([], expected))
       .toThrow("credential rotation run not found");

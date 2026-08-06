@@ -6,6 +6,7 @@ const ROTATION_LEAD_MS = 6 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+const GIT_REF_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,126}[A-Za-z0-9])?$/;
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:\\/;
 
 const canonicalIso = z.string().refine((value) => {
@@ -157,6 +158,14 @@ export function shouldRotateCredential(
   now = new Date(),
   leadTimeMs = ROTATION_LEAD_MS,
 ): boolean {
+  return credentialWindowStatus(metadata, now, leadTimeMs).rotate;
+}
+
+export function credentialWindowStatus(
+  metadata: Pick<GeneratedCredentialMetadata, "issuedAt" | "expiresAt">,
+  now = new Date(),
+  leadTimeMs = ROTATION_LEAD_MS,
+): { expired: boolean; rotate: boolean } {
   const parsed = credentialWindowSchema.parse({
     issuedAt: metadata.issuedAt,
     expiresAt: metadata.expiresAt,
@@ -164,7 +173,11 @@ export function shouldRotateCredential(
   if (!Number.isFinite(now.getTime()) || !Number.isSafeInteger(leadTimeMs) || leadTimeMs < 0) {
     throw new Error("invalid credential rotation clock");
   }
-  return Date.parse(parsed.expiresAt) - now.getTime() < leadTimeMs;
+  const remainingMs = Date.parse(parsed.expiresAt) - now.getTime();
+  return {
+    expired: remainingMs <= 0,
+    rotate: remainingMs < leadTimeMs,
+  };
 }
 
 export function credentialTokenMatchesDigest(token: string, expectedDigest: string): boolean {
@@ -227,7 +240,7 @@ export function credentialRotationRunTitle(requestId: string): string {
 
 export function selectCredentialRotationRun(
   runs: unknown,
-  expected: { requestId: string; expectedHeadSha: string },
+  expected: { requestId: string; expectedHeadRef: string; expectedHeadSha: string },
 ): CredentialRotationRun {
   const run = locateCredentialRotationRun(runs, expected);
   if (run.status !== "completed" || run.conclusion !== "success") {
@@ -238,9 +251,13 @@ export function selectCredentialRotationRun(
 
 export function locateCredentialRotationRun(
   runs: unknown,
-  expected: { requestId: string; expectedHeadSha: string },
+  expected: { requestId: string; expectedHeadRef: string; expectedHeadSha: string },
 ): CredentialRotationRun {
-  if (!Array.isArray(runs) || !GIT_SHA_PATTERN.test(expected.expectedHeadSha)) {
+  if (
+    !Array.isArray(runs)
+    || !GIT_SHA_PATTERN.test(expected.expectedHeadSha)
+    || !GIT_REF_PATTERN.test(expected.expectedHeadRef)
+  ) {
     throw new Error("invalid credential rotation run inventory");
   }
   const title = credentialRotationRunTitle(expected.requestId);
@@ -259,7 +276,7 @@ export function locateCredentialRotationRun(
   if (run.event !== "workflow_dispatch") {
     throw new Error("credential rotation run event mismatch");
   }
-  if (run.headBranch !== "main") {
+  if (run.headBranch !== expected.expectedHeadRef) {
     throw new Error("credential rotation run branch mismatch");
   }
   if (run.headSha !== expected.expectedHeadSha) {
