@@ -25,6 +25,8 @@ $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
 $SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
 . $SecurityScript
+$ProcessHelperScript = Join-Path $PSScriptRoot 'support-autopilot-windows-process-helper.ps1'
+. $ProcessHelperScript
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $ActiveCredentialPath = Join-Path $CredentialRoot 'support-autopilot.dpapi'
 $RollbackCredentialPath = Join-Path $CredentialRoot 'support-autopilot.rollback.dpapi'
@@ -39,6 +41,8 @@ $StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-run
 $CredentialGenerator = Join-Path $AdminMcpRoot 'scripts\new-support-autopilot-credential.ps1'
 $InventoryPath = Join-Path $StateRoot 'credential-workflow-runs.json'
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
+$RunnerStartStdoutPath = Join-Path $StateRoot 'runner-start.stdout.log'
+$RunnerStartStderrPath = Join-Path $StateRoot 'runner-start.stderr.log'
 
 trap {
   try {
@@ -210,48 +214,166 @@ function Get-ExactRunnerProcess {
     Where-Object {
       $_.ExecutablePath -ieq $NodeExecutable -and
       $_.CommandLine -match $pattern
-    })
+  })
 }
 
 function Start-Runner {
   param([switch]$PromotionMode)
   $heartbeatBaseline = (Get-QueueHealth).runnerLastSeenAt
+  $existing = @(Get-ExactRunnerProcess)
+  if ($existing.Count -gt 1) {
+    throw 'multiple_exact_runner_processes'
+  }
+  $baselineProcessIds = @($existing | ForEach-Object { [long]$_.ProcessId })
+
   $arguments = @(
     '-NoProfile',
     '-NonInteractive',
     '-ExecutionPolicy', 'Bypass',
-    '-File', $StartScript,
-    '-InstallRoot', $InstallRoot,
-    '-NodeExecutable', $NodeExecutable,
+    '-File', ('"' + $StartScript + '"'),
+    '-InstallRoot', ('"' + $InstallRoot + '"'),
+    '-NodeExecutable', ('"' + $NodeExecutable + '"'),
     '-SupervisorOwnedLock'
   )
   if ($PromotionMode) {
     $arguments += '-AllowPendingPromotion'
   }
-  $output = & powershell.exe @arguments
-  if ($LASTEXITCODE -ne 0) {
-    throw 'runner_start_failed'
+  [IO.File]::WriteAllText($RunnerStartStdoutPath, '', [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($RunnerStartStderrPath, '', [Text.UTF8Encoding]::new($false))
+  Set-SupportAutopilotCurrentUserAcl -Path $RunnerStartStdoutPath
+  Set-SupportAutopilotCurrentUserAcl -Path $RunnerStartStderrPath
+  $helper = Start-Process `
+    -FilePath 'powershell.exe' `
+    -ArgumentList $arguments `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $RunnerStartStdoutPath `
+    -RedirectStandardError $RunnerStartStderrPath `
+    -PassThru
+  $null = $helper.Handle
+  try {
+    if (-not (Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 900)) {
+      throw 'runner_start_helper_timeout'
+    }
+    $helper.Refresh()
+    if ($helper.ExitCode -ne 0) {
+      throw 'runner_start_helper_failed'
+    }
+    $helperOutput = Get-Content -LiteralPath $RunnerStartStdoutPath -Raw -Encoding UTF8
+    $helperLines = @($helperOutput -split '\r?\n' | Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_)
+    })
+    if ($helperLines.Count -ne 1) {
+      throw 'runner_start_helper_output_invalid'
+    }
+    $helperResult = $helperLines[0] | ConvertFrom-Json
+    $running = @(Get-ExactRunnerProcess)
+    if ($running.Count -gt 1) {
+      throw 'multiple_exact_runner_processes'
+    }
+    $startedNew = $helperResult.started -eq $true
+    $confirmedExisting = $helperResult.started -eq $false -and
+      [string]$helperResult.reason -eq 'already_running'
+    if (-not $startedNew -and -not $confirmedExisting) {
+      throw 'runner_start_helper_rejected'
+    }
+    if ($running.Count -ne 1) {
+      throw 'runner_start_not_observed'
+    }
+    $reportedProcessId = if ($startedNew) {
+      [long]$helperResult.processId
+    }
+    else {
+      $reportedIds = @($helperResult.processIds)
+      if ($reportedIds.Count -ne 1) {
+        throw 'runner_start_helper_pid_mismatch'
+      }
+      [long]$reportedIds[0]
+    }
+    if ($reportedProcessId -ne [long]$running[0].ProcessId) {
+      throw 'runner_start_helper_pid_mismatch'
+    }
   }
-  $result = ($output | Out-String).Trim() | ConvertFrom-Json
-  if ($result.started -ne $true -and $result.reason -ne 'already_running') {
-    throw 'runner_start_refused'
+  catch {
+    $originalFailure = $_.Exception.Message
+    $helperStopFailed = $false
+    try {
+      Stop-SupportAutopilotProcess -Process $helper
+    }
+    catch {
+      $helperStopFailed = $true
+    }
+    $containmentFailed = $false
+    $containedChild = $false
+    try {
+      $containedChild = Stop-SupportAutopilotPostTimeoutChildren `
+        -BaselineProcessIds $baselineProcessIds `
+        -GetProcesses { @(Get-ExactRunnerProcess) } `
+        -StopProcesses {
+          param($Processes)
+          if (@($Processes).Count -gt 0) {
+            Stop-Runner -StopTimeoutSeconds 5 -ForceAfterTimeout
+          }
+        }
+    }
+    catch {
+      $containmentFailed = $true
+    }
+    if ($containedChild) {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'runner_start_child_contained' `
+        -Outcome 'post_timeout'
+    }
+    $helperFailureOutcome = switch ($originalFailure) {
+      'runner_start_helper_timeout' { 'timeout' }
+      'runner_start_helper_failed' { 'exit_code' }
+      'runner_start_helper_output_invalid' { 'output_invalid' }
+      'runner_start_helper_pid_mismatch' { 'pid_mismatch' }
+      'runner_start_helper_rejected' { 'rejected' }
+      default { 'fixed_failure' }
+    }
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'runner_start_helper_failed' `
+      -Outcome $helperFailureOutcome
+    if ($containmentFailed) {
+      throw 'runner_start_timeout_containment_failed'
+    }
+    if ($helperStopFailed) {
+      throw 'runner_start_helper_stop_failed'
+    }
+    throw $originalFailure
   }
-  if (
-    $result.started -eq $true -and
-    ($null -eq $result.processId -or [long]$result.processId -le 0)
-  ) {
-    throw 'runner_start_result_invalid'
-  }
+  $startOutcome = if ($startedNew) { 'new_process' } else { 'already_running' }
+  Write-SupportAutopilotRedactedEvent `
+    -EventPath $EventPath `
+    -EventCode 'runner_start_confirmed' `
+    -Outcome $startOutcome
   return [pscustomobject]@{
     heartbeatBaseline = $heartbeatBaseline
-    processId = if ($result.started -eq $true) { [long]$result.processId } else { 0 }
-    started = $result.started -eq $true
+    processId = $reportedProcessId
+    started = $startedNew
   }
 }
 
 function Stop-Runner {
-  $output = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-    -File $StopScript -InstallRoot $InstallRoot -NodeExecutable $NodeExecutable
+  param(
+    [ValidateRange(1, 1800)][int]$StopTimeoutSeconds = 720,
+    [switch]$ForceAfterTimeout
+  )
+  $arguments = @(
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', ('"' + $StopScript + '"'),
+    '-InstallRoot', ('"' + $InstallRoot + '"'),
+    '-NodeExecutable', ('"' + $NodeExecutable + '"'),
+    '-StopTimeoutSeconds', $StopTimeoutSeconds
+  )
+  if ($ForceAfterTimeout) {
+    $arguments += '-ForceAfterTimeout'
+  }
+  $output = & powershell.exe @arguments
   if ($LASTEXITCODE -ne 0) {
     throw 'runner_stop_failed'
   }
@@ -284,8 +406,7 @@ function Wait-RunnerReady {
       try {
         $health = Get-QueueHealth
         Assert-QueueGatesReady $health
-        $expectedProcess = $StartResult.started -ne $true -or
-          [long]$running[0].ProcessId -eq [long]$StartResult.processId
+        $expectedProcess = [long]$running[0].ProcessId -eq [long]$StartResult.processId
         $heartbeatAdvanced = $StartResult.started -ne $true
         if (
           -not $heartbeatAdvanced -and
@@ -299,6 +420,10 @@ function Wait-RunnerReady {
           )
         }
         if ($expectedProcess -and $heartbeatAdvanced) {
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'runner_readiness_confirmed' `
+            -Outcome 'authenticated_post_start_heartbeat'
           return
         }
       }

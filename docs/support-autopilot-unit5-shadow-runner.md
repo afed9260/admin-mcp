@@ -95,6 +95,20 @@ Windows password.
   than six hours remain. It never reads or changes customer authentication,
   provider credentials, money, ticket state, or customer settings.
 
+The start script delegates only process creation to a bounded Node launcher.
+That launcher inherits the already-prepared non-secret runtime environment,
+binds all three standard streams to current-user-only files, detaches the exact
+runner process, returns its PID, and exits. The supervisor does not synchronously
+wait on a PowerShell process that owns the long-lived runner. It retains the
+rotation lock until the transient PowerShell helper exits, validates its exit
+code and returned PID, and terminates that exact helper before releasing the
+lock on timeout. It then scans for exact runner PIDs that were absent before
+the helper and contains any boundary-race child before the lock is released.
+Containment requests a bounded graceful drain, then force-stops the still
+matching exact runner process when it ignores that request.
+An existing runner is accepted only when the start script reports it fresh;
+an idle stale runner is drained and replaced through that same start script.
+
 Build the reviewed checkout and inspect the no-mutation plans first:
 
 ```powershell

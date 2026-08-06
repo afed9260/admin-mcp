@@ -32,14 +32,23 @@ describe("Windows support autopilot lifecycle scripts", () => {
 
   it("starts one exact hidden runner process with redacted fixed log paths", () => {
     const source = script("start-support-autopilot-shadow-runner.ps1");
+    const launcherSource = readFileSync(
+      path.resolve("src", "runner", "support-autopilot-windows-process-launcher-main.ts"),
+      "utf8",
+    );
 
     expect(source).toContain("[regex]::Escape($NodeExecutable)");
     expect(source).toContain("[regex]::Escape($EntryPoint)");
     expect(source).toContain("Get-CimInstance -ClassName Win32_Process");
     expect(source).not.toMatch(/CommandLine\s+-like/i);
-    expect(source).toMatch(/-WindowStyle\s+Hidden/);
+    expect(source).toContain("support-autopilot-windows-process-launcher-main.js");
+    expect(launcherSource).toContain("detached: true");
+    expect(launcherSource).toContain("windowsHide: true");
+    expect(launcherSource).toContain("child.unref()");
     expect(source).toContain("shadow-runner.stdout.log");
     expect(source).toContain("shadow-runner.stderr.log");
+    expect(source).toContain("shadow-runner.stdin");
+    expect(launcherSource).toContain("stdio: [stdinFd, stdoutFd, stderrFd]");
     expect(source).not.toContain("Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN");
     expect(source).not.toContain("Remove-Item Env:ADMIN_API_TOKEN");
     expect(source).toContain("rotation_pending");
@@ -181,6 +190,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     for (const name of [
       "support-autopilot-credential-supervisor-main.js",
       "support-autopilot-credential-supervisor.js",
+      "support-autopilot-windows-process-launcher-main.js",
       "windows-dpapi-secret-provider.js",
     ]) {
       cpSync(path.resolve("dist", "runner", name), path.join(runnerRoot, name));
@@ -190,12 +200,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
       path.join(fixtures, "fake-health.cjs"),
       path.join(runnerRoot, "support-autopilot-local-health-main.js"),
     );
-    cpSync(
-      path.join(fixtures, "fake-start-runner.ps1"),
-      path.join(scriptRoot, "start-support-autopilot-shadow-runner.ps1"),
-    );
     for (const name of [
       "new-support-autopilot-credential.ps1",
+      "start-support-autopilot-shadow-runner.ps1",
       "stop-support-autopilot-shadow-runner.ps1",
       "support-autopilot-windows-security.ps1",
     ]) {
@@ -245,6 +252,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
     });
     try {
       await new Promise((resolve) => setTimeout(resolve, 300));
+      const initialHeartbeat = existsSync(fakeHeartbeatPath)
+        ? readFileSync(fakeHeartbeatPath, "utf8").trim()
+        : "missing";
       const result = spawnSync("powershell.exe", [
         "-NoProfile",
         "-NonInteractive",
@@ -272,10 +282,24 @@ describe("Windows support autopilot lifecycle scripts", () => {
       const eventPath = path.join(stateRoot, "credential-rotation.events.jsonl");
       const redactedEvents = existsSync(eventPath) ? readFileSync(eventPath, "utf8") : "";
       const journal = readFileSync(path.join(stateRoot, "credential-rotation.json"), "utf8");
+      const finalHeartbeat = existsSync(fakeHeartbeatPath)
+        ? readFileSync(fakeHeartbeatPath, "utf8").trim()
+        : "missing";
+      const runnerStartStdoutPath = path.join(stateRoot, "runner-start.stdout.log");
+      const runnerStartStderrPath = path.join(stateRoot, "runner-start.stderr.log");
+      const runnerStartStdout = existsSync(runnerStartStdoutPath)
+        ? readFileSync(runnerStartStdoutPath, "utf8")
+        : "missing";
+      const runnerStartStderr = existsSync(runnerStartStderrPath)
+        ? readFileSync(runnerStartStderrPath, "utf8")
+        : "missing";
       expect(
         result.status,
         `${result.stderr}\nstdout=${result.stdout}\nevents=${redactedEvents}\n` +
-          `journal=${journal}\nfakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
+          `journal=${journal}\ninitialHeartbeat=${initialHeartbeat}\n` +
+          `finalHeartbeat=${finalHeartbeat}\nrunnerStartStdout=${runnerStartStdout}\n` +
+          `runnerStartStderr=${runnerStartStderr}\n` +
+          `fakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
       ).toBe(0);
       expect(JSON.parse(result.stdout.trim())).toMatchObject({
         outcome: "rotated",
@@ -311,6 +335,147 @@ describe("Windows support autopilot lifecycle scripts", () => {
         "-ForceAfterTimeout",
       ], { encoding: "utf8", windowsHide: true });
       rmSync(installRoot, { force: true, recursive: true });
+    }
+  }, 45_000);
+
+  windowsIt("replaces a stale exact runner while finalizing candidate promotion", async () => {
+    const temporaryParent = path.join(os.tmpdir(), "support-autopilot-stale-recovery-tests");
+    mkdirSync(temporaryParent, { recursive: true });
+    const installRoot = mkdtempSync(path.join(temporaryParent, "case-"));
+    const adminRoot = path.join(installRoot, "admin-mcp");
+    const runnerRoot = path.join(adminRoot, "dist", "runner");
+    const scriptRoot = path.join(adminRoot, "scripts");
+    const stateRoot = path.join(installRoot, "state");
+    const credentialRoot = path.join(installRoot, "credentials");
+    const fixtures = path.resolve("test", "fixtures", "support-autopilot-supervisor");
+    const activeCredentialPath = path.join(credentialRoot, "support-autopilot.dpapi");
+    const runnerEntryPoint = path.join(runnerRoot, "support-autopilot-shadow-main.js");
+    const drainPath = path.join(stateRoot, "shadow-runner.drain");
+    const heartbeatPath = path.join(stateRoot, "fake-runner-heartbeat.txt");
+    mkdirSync(runnerRoot, { recursive: true });
+    mkdirSync(scriptRoot, { recursive: true });
+    mkdirSync(stateRoot, { recursive: true });
+    mkdirSync(credentialRoot, { recursive: true });
+    writeFileSync(path.join(adminRoot, "package.json"), '{"type":"module"}', "utf8");
+    cpSync(realpathSync(path.resolve("node_modules", "zod")), path.join(adminRoot, "node_modules", "zod"), {
+      recursive: true,
+    });
+    for (const name of [
+      "support-autopilot-credential-supervisor-main.js",
+      "support-autopilot-credential-supervisor.js",
+      "support-autopilot-windows-process-launcher-main.js",
+      "windows-dpapi-secret-provider.js",
+    ]) {
+      cpSync(path.resolve("dist", "runner", name), path.join(runnerRoot, name));
+    }
+    cpSync(path.join(fixtures, "fake-runner.cjs"), runnerEntryPoint);
+    writeFileSync(path.join(runnerRoot, "support-autopilot-local-health-main.js"), [
+      'import { existsSync, readFileSync } from "node:fs";',
+      "const heartbeatPath = process.env.SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH;",
+      "const runnerLastSeenAt = heartbeatPath && existsSync(heartbeatPath)",
+      "  ? readFileSync(heartbeatPath, 'utf8').trim() : null;",
+      "const runnerFresh = runnerLastSeenAt !== null",
+      "  && Date.now() - Date.parse(runnerLastSeenAt) <= 5000;",
+      "process.stdout.write(JSON.stringify({",
+      "  activeLeases: 0, claimsEnabled: true, gatesReady: runnerFresh,",
+      "  jobCreationEnabled: true, pendingJobs: 0, privacyGatePassed: true,",
+      "  reachable: true, runnerFresh, runnerLastSeenAt, runnerReady: runnerFresh,",
+      "  shadowModeEnabled: true",
+      "}) + '\\n');",
+    ].join("\n"), "utf8");
+    for (const name of [
+      "new-support-autopilot-credential.ps1",
+      "start-support-autopilot-shadow-runner.ps1",
+      "stop-support-autopilot-shadow-runner.ps1",
+      "support-autopilot-windows-security.ps1",
+    ]) {
+      cpSync(path.resolve("scripts", name), path.join(scriptRoot, name));
+    }
+    const generated = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-File", path.join(scriptRoot, "new-support-autopilot-credential.ps1"),
+      "-OutputPath", activeCredentialPath,
+    ], { encoding: "utf8", windowsHide: true });
+    expect(generated.status, generated.stderr).toBe(0);
+    const metadata = JSON.parse(generated.stdout.trim()) as {
+      expiresAt: string;
+      issuedAt: string;
+      tokenSha256: string;
+    };
+    const requestId = "11111111-2222-4333-8444-555555555555";
+    writeFileSync(path.join(stateRoot, "credential-rotation.json"), JSON.stringify({
+      activeCredential: { expiresAt: metadata.expiresAt, issuedAt: metadata.issuedAt },
+      pendingRotation: {
+        candidatePath: path.join(credentialRoot, `candidate-${requestId}.dpapi`),
+        expiresAt: metadata.expiresAt,
+        expectedHeadSha: "ba167befdbded7e6235d192b5d3c81e336f09490",
+        issuedAt: metadata.issuedAt,
+        requestId,
+        stage: "candidate_promoted",
+        tokenSha256: metadata.tokenSha256,
+        workflowRunId: 424242,
+      },
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+    }), "utf8");
+    writeFileSync(path.join(stateRoot, "privacy-attestation.json"), JSON.stringify({
+      attestationId: "support-privacy-1",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    }), "utf8");
+
+    const staleRunner = spawn(process.execPath, [runnerEntryPoint], {
+      env: {
+        ...process.env,
+        SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH: drainPath,
+        SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH: heartbeatPath,
+      },
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      writeFileSync(heartbeatPath, "2026-08-06T00:00:00.000Z", "utf8");
+      const result = spawnSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.resolve("scripts", "invoke-support-autopilot-credential-supervisor.ps1"),
+        "-InstallRoot", installRoot,
+        "-NodeExecutable", process.execPath,
+        "-GitHubCliPath", path.join(fixtures, "fake-gh.cmd"),
+      ], {
+        encoding: "utf8",
+        env: { ...process.env, SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH: heartbeatPath },
+        timeout: 30_000,
+        windowsHide: true,
+      });
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toMatchObject({ outcome: "rotated", rotated: true });
+      const finalState = JSON.parse(
+        readFileSync(path.join(stateRoot, "credential-rotation.json"), "utf8"),
+      ) as { pendingRotation: unknown };
+      expect(finalState.pendingRotation).toBeNull();
+      const stopPlan = spawnSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(scriptRoot, "stop-support-autopilot-shadow-runner.ps1"),
+        "-InstallRoot", installRoot,
+        "-NodeExecutable", process.execPath,
+        "-PlanOnly",
+      ], { encoding: "utf8", windowsHide: true });
+      expect(stopPlan.status, stopPlan.stderr).toBe(0);
+      const runningIds = JSON.parse(stopPlan.stdout.trim()).matchingProcessIds as number[];
+      expect(runningIds).toHaveLength(1);
+      expect(runningIds).not.toContain(staleRunner.pid);
+    } finally {
+      if (staleRunner.exitCode === null) staleRunner.kill();
+      spawnSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        "-File", path.join(scriptRoot, "stop-support-autopilot-shadow-runner.ps1"),
+        "-InstallRoot", installRoot,
+        "-NodeExecutable", process.execPath,
+        "-StopTimeoutSeconds", "10",
+        "-ForceAfterTimeout",
+      ], { encoding: "utf8", windowsHide: true });
+      rmSync(installRoot, { force: true, maxRetries: 100, recursive: true, retryDelay: 100 });
     }
   }, 45_000);
 
@@ -366,6 +531,125 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(waitReady).toContain("heartbeatBaseline");
     expect(waitReady).toContain("runnerLastSeenAt");
   });
+
+  it("contains the transient start helper before releasing the rotation lock", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const startRunnerIndex = source.indexOf("function Start-Runner");
+    const startRunner = source.slice(
+      startRunnerIndex,
+      source.indexOf("\nfunction Stop-Runner", startRunnerIndex),
+    );
+
+    expect(startRunner).toContain("Wait-SupportAutopilotProcessExit");
+    expect(startRunner).toContain("Stop-SupportAutopilotProcess");
+    expect(startRunner).toContain("Stop-SupportAutopilotPostTimeoutChildren");
+    expect(startRunner).toContain("Stop-Runner -StopTimeoutSeconds 5 -ForceAfterTimeout");
+    expect(startRunner).toContain("runner_start_helper_timeout");
+    expect(startRunner).toContain("runner_start_helper_pid_mismatch");
+    const helperSource = script("support-autopilot-windows-process-helper.ps1");
+    expect(helperSource).toContain("Stop-Process -Id $Process.Id");
+  });
+
+  windowsIt("contains a detached runner appearing at the helper timeout boundary", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "support-autopilot-helper-race-"));
+    const entryPoint = path.join(
+      root,
+      "admin-mcp",
+      "dist",
+      "runner",
+      "support-autopilot-shadow-main.js",
+    );
+    const stdinPath = path.join(root, "runner.stdin");
+    const stdoutPath = path.join(root, "runner.stdout.log");
+    const stderrPath = path.join(root, "runner.stderr.log");
+    const workingDirectory = os.tmpdir();
+    const delayedScript = path.join(root, "launch-and-hang.ps1");
+    const harnessScript = path.join(root, "harness.ps1");
+    const markerPath = path.join(root, "launched.json");
+    const helperScript = path.resolve("scripts", "support-autopilot-windows-process-helper.ps1");
+    const stopScript = path.resolve("scripts", "stop-support-autopilot-shadow-runner.ps1");
+    const launcherMain = path.resolve(
+      "dist",
+      "runner",
+      "support-autopilot-windows-process-launcher-main.js",
+    );
+    const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    mkdirSync(path.dirname(entryPoint), { recursive: true });
+    writeFileSync(entryPoint, "setInterval(() => {}, 1000);\r\n", "utf8");
+    for (const streamPath of [stdinPath, stdoutPath, stderrPath]) {
+      writeFileSync(streamPath, "", "utf8");
+    }
+    writeFileSync(delayedScript, [
+      "Start-Sleep -Seconds 30",
+    ].join("\r\n"), "utf8");
+    writeFileSync(harnessScript, [
+      `$ErrorActionPreference = 'Stop'`,
+      `. ${quote(helperScript)}`,
+      `$helper = Start-Process -FilePath 'powershell.exe' -ArgumentList @(`,
+      `  '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',`,
+      `  '-File', ('"' + ${quote(delayedScript)} + '"')`,
+      `) -WindowStyle Hidden -PassThru`,
+      `$null = $helper.Handle`,
+      `$exitedInTime = Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 1`,
+      `if ($exitedInTime) { throw 'helper_exited_unexpectedly' }`,
+      `Stop-SupportAutopilotProcess -Process $helper`,
+      `$launchOutput = & ${quote(process.execPath)} ${quote(launcherMain)} launch --node-executable ${quote(process.execPath)} --entry-point ${quote(entryPoint)} --working-directory ${quote(workingDirectory)} --stdin-path ${quote(stdinPath)} --stdout-path ${quote(stdoutPath)} --stderr-path ${quote(stderrPath)}`,
+      `if ($LASTEXITCODE -ne 0) { throw 'launcher_failed' }`,
+      `[IO.File]::WriteAllText(${quote(markerPath)}, ($launchOutput | Out-String).Trim(), [Text.UTF8Encoding]::new($false))`,
+      `$launchResult = ($launchOutput | Out-String).Trim() | ConvertFrom-Json`,
+      `$launchedProcessId = [long]$launchResult.processId`,
+      `$getProcesses = {`,
+      `  @(Get-CimInstance Win32_Process -Filter "ProcessId=$launchedProcessId")`,
+      `}.GetNewClosure()`,
+      `$stopProcesses = {`,
+      `  param($Processes)`,
+      `  $stopOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${quote(stopScript)} -InstallRoot ${quote(root)} -NodeExecutable ${quote(process.execPath)} -StopTimeoutSeconds 1 -ForceAfterTimeout`,
+      `  if ($LASTEXITCODE -ne 0) { throw 'production_stop_failed' }`,
+      `  $stopResult = ($stopOutput | Out-String).Trim() | ConvertFrom-Json`,
+      `  if ($stopResult.stopped -ne $true) { throw 'production_stop_rejected' }`,
+      `}.GetNewClosure()`,
+      `$contained = Stop-SupportAutopilotPostTimeoutChildren -BaselineProcessIds @() -GetProcesses $getProcesses -StopProcesses $stopProcesses -SettleMilliseconds 1000`,
+      `$remaining = @(& $getProcesses)`,
+      `[pscustomobject]@{`,
+      `  contained = $contained`,
+      `  remaining = $remaining.Count`,
+      `} | ConvertTo-Json -Compress`,
+    ].join("\r\n"), "utf8");
+    try {
+      const result = spawnSync("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        harnessScript,
+      ], { encoding: "utf8", timeout: 10_000, windowsHide: true });
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({
+        contained: true,
+        remaining: 0,
+      });
+    } finally {
+      if (existsSync(markerPath)) {
+        try {
+          const launched = JSON.parse(readFileSync(markerPath, "utf8")) as { processId?: number };
+          if (launched.processId) {
+            try { process.kill(launched.processId); } catch {}
+            for (let attempt = 0; attempt < 100; attempt += 1) {
+              try {
+                process.kill(launched.processId, 0);
+                await new Promise((resolve) => setTimeout(resolve, 50));
+              } catch {
+                break;
+              }
+            }
+          }
+        } catch {}
+      }
+      rmSync(root, { force: true, maxRetries: 100, recursive: true, retryDelay: 100 });
+    }
+  }, 15_000);
 
   it("preserves recovery evidence until the old credential is confirmed healthy", () => {
     const source = script("invoke-support-autopilot-credential-supervisor.ps1");

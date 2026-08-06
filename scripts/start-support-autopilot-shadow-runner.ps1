@@ -25,8 +25,10 @@ $LockPath = Join-Path $StateRoot 'credential-rotation.lock'
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $SupervisorMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-credential-supervisor-main.js'
 $HealthMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-local-health-main.js'
+$ProcessLauncherMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-windows-process-launcher-main.js'
 $StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-runner.ps1'
 $DrainRequestPath = Join-Path $StateRoot 'shadow-runner.drain'
+$StdinPath = Join-Path $StateRoot 'shadow-runner.stdin'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
 $StderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
@@ -113,6 +115,7 @@ foreach ($requiredPath in @(
   $EntryPoint,
   $SupervisorMain,
   $HealthMain,
+  $ProcessLauncherMain,
   $StopScript
 )) {
   if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
@@ -223,20 +226,42 @@ if (Test-Path -LiteralPath $DrainRequestPath -PathType Leaf) {
 
 [IO.File]::WriteAllText($StdoutPath, '', [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($StderrPath, '', [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($StdinPath, '', [Text.UTF8Encoding]::new($false))
 Set-SupportAutopilotCurrentUserAcl -Path $StdoutPath
 Set-SupportAutopilotCurrentUserAcl -Path $StderrPath
+Set-SupportAutopilotCurrentUserAcl -Path $StdinPath
 
-$process = Start-Process `
-  -FilePath $NodeExecutable `
-  -ArgumentList @("`"$EntryPoint`"") `
-  -WorkingDirectory $AdminMcpRoot `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $StdoutPath `
-  -RedirectStandardError $StderrPath `
-  -PassThru
+$launchOutput = & $NodeExecutable $ProcessLauncherMain `
+  launch `
+  --node-executable $NodeExecutable `
+  --entry-point $EntryPoint `
+  --working-directory $AdminMcpRoot `
+  --stdin-path $StdinPath `
+  --stdout-path $StdoutPath `
+  --stderr-path $StderrPath 2>$null
+if ($LASTEXITCODE -ne 0) {
+  throw 'detached_runner_launch_failed'
+}
+$launch = ($launchOutput | Out-String).Trim() | ConvertFrom-Json
+if ($launch.started -ne $true -or [long]$launch.processId -le 0) {
+  throw 'detached_runner_launch_result_invalid'
+}
+$launchDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+do {
+  $launched = @(Get-SupportAutopilotRunnerProcess | Where-Object {
+    [long]$_.ProcessId -eq [long]$launch.processId
+  })
+  if ($launched.Count -eq 1) {
+    break
+  }
+  Start-Sleep -Milliseconds 100
+} while ([DateTimeOffset]::UtcNow -lt $launchDeadline)
+if ($launched.Count -ne 1) {
+  throw 'detached_runner_identity_not_observed'
+}
 
 [pscustomobject]@{
-  processId = $process.Id
+  processId = [long]$launch.processId
   started = $true
 } | ConvertTo-Json -Compress
 Write-SupportAutopilotRedactedEvent `

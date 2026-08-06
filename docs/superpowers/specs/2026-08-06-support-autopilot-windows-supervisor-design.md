@@ -65,12 +65,21 @@ stage. It never stores the token.
 7. Atomically move the current canonical DPAPI blob to an encrypted backup and
    promote the candidate. If the promotion fails, retain the journal and retry
    recovery; never print either blob.
-8. Record the current heartbeat, start the runner, and require the authenticated
-   dedicated health response to report `runnerReady=true` plus a heartbeat
-   newer than that pre-start baseline. Only then mark the new credential active
-   and remove stale encrypted backups beyond the retained rollback copy. The
-   supervisor never reads the live redirected stderr file as a readiness
-   boundary.
+8. Record the current heartbeat and launch the runner through the bounded Node
+   process launcher. The launcher detaches the runner with stdin, stdout, and
+   stderr bound only to protected files, then exits. The supervisor observes
+   the exact new PID directly, waits for the transient PowerShell helper to
+   exit, and verifies its exit code and returned PID before releasing the
+   rotation lock. A timed-out helper is terminated by exact PID and awaited so
+   it cannot launch later. A post-termination scan contains any exact runner
+   PID that was absent before the helper, closing the detached-child boundary
+   race. That containment uses a bounded graceful drain followed by force-stop
+   of the still matching exact runner when needed. Existing idle stale runners are drained and replaced by the canonical
+   start script before verification. The supervisor then requires the authenticated dedicated health
+   response to report `runnerReady=true` plus a heartbeat newer than the
+   pre-start baseline. Only then mark the new credential active and remove
+   stale encrypted backups beyond the retained rollback copy. The supervisor
+   never reads the live redirected stderr file as a readiness boundary.
 
 If GitHub rejects or fails the rotation, the canonical blob remains unchanged
 and the old runner is restarted. If the server accepted the candidate but the
@@ -102,7 +111,10 @@ All mutable files remain under `C:\Users\Arkadiy\.sdelka-support-autopilot`:
 - `state\credential-rotation.json`: non-secret durable journal;
 - `state\credential-rotation.lock`: exclusive local lock;
 - `state\credential-rotation.events.jsonl`: redacted event codes only;
-- `state\shadow-runner.stderr.log`: existing redacted runner events.
+- `state\shadow-runner.stdin`: empty detached-process input;
+- `state\shadow-runner.stderr.log`: existing redacted runner events;
+- `state\runner-start.stdout.log` and `runner-start.stderr.log`: bounded
+  helper diagnostics without prompts, ticket contents, or credentials;
 - `state\shadow-runner.drain`: non-secret graceful-stop request.
 
 User-only ACLs are required for the credential, state, and log paths. The empty
