@@ -100,6 +100,12 @@ $definitions = @(
 )
 
 if ($PlanOnly) {
+  foreach ($definition in $definitions) {
+    [xml](New-TaskXml `
+      -ScriptPath $definition.script `
+      -Interval $definition.interval `
+      -ExecutionTimeLimit $definition.timeLimit) | Out-Null
+  }
   [pscustomobject]@{
     currentUserSid = $CurrentUserSid
     planOnly = $true

@@ -27,6 +27,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("credential-rotation.lock");
     expect(source).toContain("[IO.FileShare]::None");
     expect(source).toContain("rotation_lock_held");
+    expect(source).toContain("credential_state_seed_required");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
   });
@@ -105,6 +106,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("interval = 'PT5M'");
     expect(source).toContain("interval = 'PT1H'");
     expect(source).toContain("Register-ScheduledTask");
+    expect(source).toContain("[xml](New-TaskXml");
     expect(source).not.toMatch(/-Password\b/i);
     expect(source).toContain("[switch]$PlanOnly");
   });

@@ -90,6 +90,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 $rotationState = Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8 |
   ConvertFrom-Json
+if ($null -eq $rotationState.activeCredential) {
+  [pscustomobject]@{ reason = 'credential_state_seed_required'; started = $false } |
+    ConvertTo-Json -Compress
+  exit 0
+}
 if ($null -ne $rotationState.pendingRotation) {
   $promotionAllowed = $AllowPendingPromotion -and
     $rotationState.pendingRotation.stage -eq 'candidate_promoted'

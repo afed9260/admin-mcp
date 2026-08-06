@@ -26,30 +26,30 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 - Create: `src/runner/support-autopilot-credential-supervisor.ts`
 - Create: `test/support-autopilot-credential-supervisor.test.ts`
 
-- [ ] Write failing tests for strict non-secret metadata parsing, six-hour
+- [x] Write failing tests for strict non-secret metadata parsing, six-hour
   renewal timing, recoverable stages, and exact GitHub run selection.
-- [ ] Run `corepack pnpm vitest run test/support-autopilot-credential-supervisor.test.ts`
+- [x] Run `corepack pnpm vitest run test/support-autopilot-credential-supervisor.test.ts`
   and verify the new tests fail because the module is absent.
-- [ ] Implement the minimum pure TypeScript contracts and selectors.
-- [ ] Rerun the focused test and verify it passes.
-- [ ] Commit the policy and tests.
+- [x] Implement the minimum pure TypeScript contracts and selectors.
+- [x] Rerun the focused test and verify it passes.
+- [x] Commit the policy and tests.
 
 ## Task 2: Add Safe Local Health Probe
 
 **Files:**
 
 - Create: `src/runner/support-autopilot-local-health-main.ts`
-- Create: `test/support-autopilot-local-health-main.spec.ts`
+- Create: `test/support-autopilot-local-health-main.test.ts`
 - Modify: `package.json`
 
-- [ ] Write failing tests proving exact health-shape validation and redacted
+- [x] Write failing tests proving exact health-shape validation and redacted
   failure output.
-- [ ] Run the focused test and verify it fails before implementation.
-- [ ] Load the DPAPI credential through the existing provider, call only the
+- [x] Run the focused test and verify it fails before implementation.
+- [x] Load the DPAPI credential through the existing provider, call only the
   dedicated health route, validate the exact response, and emit a sanitized
   readiness object. Never print the token, endpoint response body, or raw error.
-- [ ] Add the package entry point and rerun the tests.
-- [ ] Commit the probe and tests.
+- [x] Add the package entry point and rerun the tests.
+- [x] Commit the probe and tests.
 
 ## Task 3: Add Windows Runner Lifecycle Scripts
 
@@ -57,29 +57,29 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 
 - Create: `scripts/start-support-autopilot-shadow-runner.ps1`
 - Create: `scripts/stop-support-autopilot-shadow-runner.ps1`
-- Create: `test/windows-support-autopilot-scripts.spec.ts`
+- Create: `test/windows-support-autopilot-scripts.test.ts`
 
-- [ ] Add static failing tests for exact process matching, hidden launch,
+- [x] Add static failing tests for exact process matching, hidden launch,
   bounded stop verification, and redacted log paths.
-- [ ] Run the script spec and verify it fails before scripts exist.
-- [ ] Canonicalize the reviewed launcher and add the bounded stop script.
-- [ ] Rerun the script spec and perform a local plan-only invocation.
-- [ ] Commit the lifecycle scripts and tests.
+- [x] Run the script spec and verify it fails before scripts exist.
+- [x] Canonicalize the reviewed launcher and add the bounded stop script.
+- [x] Rerun the script spec and perform a local plan-only invocation.
+- [x] Commit the lifecycle scripts and tests.
 
 ## Task 4: Add Recoverable Credential Rotation Script
 
 **Files:**
 
 - Create: `scripts/invoke-support-autopilot-credential-supervisor.ps1`
-- Modify: `test/windows-support-autopilot-scripts.spec.ts`
+- Modify: `test/windows-support-autopilot-scripts.test.ts`
 
-- [ ] Extend script specs for locking, journal recovery, no raw-token arguments,
+- [x] Extend script specs for locking, journal recovery, no raw-token arguments,
   exact workflow correlation, atomic promotion, and redacted events.
-- [ ] Run the focused spec and verify failure.
-- [ ] Implement the supervisor using the TypeScript policy module and existing
+- [x] Run the focused spec and verify failure.
+- [x] Implement the supervisor using the TypeScript policy module and existing
   DPAPI generator.
-- [ ] Rerun focused tests and a local no-mutation plan invocation.
-- [ ] Commit the rotation script and tests.
+- [x] Rerun focused tests and a local no-mutation plan invocation.
+- [x] Commit the rotation script and tests.
 
 ## Task 5: Add Scheduled Task Installer
 
@@ -87,15 +87,15 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 
 - Create: `scripts/install-support-autopilot-scheduled-tasks.ps1`
 - Create: `scripts/uninstall-support-autopilot-scheduled-tasks.ps1`
-- Modify: `test/windows-support-autopilot-scripts.spec.ts`
+- Modify: `test/windows-support-autopilot-scripts.test.ts`
 
-- [ ] Extend script specs for the two exact task names, interactive-token
+- [x] Extend script specs for the two exact task names, interactive-token
   principal, least privilege, repeated triggers, `StartWhenAvailable`, and
   `IgnoreNew`.
-- [ ] Run the focused spec and verify failure.
-- [ ] Implement idempotent install and uninstall scripts with a plan-only mode.
-- [ ] Rerun tests and inspect plan-only task definitions for secrets.
-- [ ] Commit the task lifecycle scripts and tests.
+- [x] Run the focused spec and verify failure.
+- [x] Implement idempotent install and uninstall scripts with a plan-only mode.
+- [x] Rerun tests and inspect plan-only task definitions for secrets.
+- [x] Commit the task lifecycle scripts and tests.
 
 ## Task 6: Add Exact Workflow Correlation
 
@@ -107,14 +107,14 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 - Modify: `src/scripts-specs/support-autopilot-credential-rotation.workflow.spec.ts`
 - Modify: `docs/playbooks/support-autopilot-credential-rotation.md`
 
-- [ ] Add failing workflow assertions for required canonical `request_id`, the
+- [x] Add failing workflow assertions for required canonical `request_id`, the
   deterministic run name, and validation before the guarded shell script.
-- [ ] Run `node --max-old-space-size=8192 node_modules/jest/bin/jest.js --runInBand
+- [x] Run `node --max-old-space-size=8192 node_modules/jest/bin/jest.js --runInBand
   support-autopilot-credential-rotation.workflow.spec.ts` and verify failure.
-- [ ] Modify only the workflow and playbook; do not change the guarded mutation
+- [x] Modify only the workflow and playbook; do not change the guarded mutation
   script or managed variables.
-- [ ] Rerun the focused workflow spec and tracked-secret guard.
-- [ ] Commit the backend correlation contract.
+- [x] Rerun the focused workflow spec and tracked-secret guard.
+- [x] Commit the backend correlation contract.
 
 ## Task 7: Document And Verify
 
@@ -122,9 +122,9 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 
 - Modify: `docs/support-autopilot-unit5-shadow-runner.md`
 
-- [ ] Update the runner runbook with installation, recovery, and limitations.
-- [ ] Run focused tests and full `corepack pnpm verify` in `admin-mcp`.
-- [ ] Run the backend workflow spec, build, tracked-secret guard, and diff check.
+- [x] Update the runner runbook with installation, recovery, and limitations.
+- [x] Run focused tests and full `corepack pnpm verify` in `admin-mcp`.
+- [x] Run the backend workflow spec, build, tracked-secret guard, and diff check.
 - [ ] Self-review both branch diffs and obtain an independent code review.
 - [ ] Open and merge reviewed PRs, then fast-forward the installed checkout.
 
