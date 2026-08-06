@@ -69,7 +69,7 @@ describe("support autopilot Windows process launcher", () => {
         "launch",
         "--node-executable", process.execPath,
         "--entry-point", entryPoint,
-        "--working-directory", root,
+        "--working-directory", tmpdir(),
         "--stdin-path", stdinPath,
         "--stdout-path", stdoutPath,
         "--stderr-path", stderrPath,

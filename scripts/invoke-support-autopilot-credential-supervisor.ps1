@@ -311,7 +311,7 @@ function Start-Runner {
         -StopProcesses {
           param($Processes)
           if (@($Processes).Count -gt 0) {
-            Stop-Runner
+            Stop-Runner -StopTimeoutSeconds 5 -ForceAfterTimeout
           }
         }
     }
@@ -357,8 +357,23 @@ function Start-Runner {
 }
 
 function Stop-Runner {
-  $output = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-    -File $StopScript -InstallRoot $InstallRoot -NodeExecutable $NodeExecutable
+  param(
+    [ValidateRange(1, 1800)][int]$StopTimeoutSeconds = 720,
+    [switch]$ForceAfterTimeout
+  )
+  $arguments = @(
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', ('"' + $StopScript + '"'),
+    '-InstallRoot', ('"' + $InstallRoot + '"'),
+    '-NodeExecutable', ('"' + $NodeExecutable + '"'),
+    '-StopTimeoutSeconds', $StopTimeoutSeconds
+  )
+  if ($ForceAfterTimeout) {
+    $arguments += '-ForceAfterTimeout'
+  }
+  $output = & powershell.exe @arguments
   if ($LASTEXITCODE -ne 0) {
     throw 'runner_stop_failed'
   }

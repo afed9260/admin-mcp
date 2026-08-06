@@ -73,7 +73,8 @@ stage. It never stores the token.
    rotation lock. A timed-out helper is terminated by exact PID and awaited so
    it cannot launch later. A post-termination scan contains any exact runner
    PID that was absent before the helper, closing the detached-child boundary
-   race. Existing idle stale runners are drained and replaced by the canonical
+   race. That containment uses a bounded graceful drain followed by force-stop
+   of the still matching exact runner when needed. Existing idle stale runners are drained and replaced by the canonical
    start script before verification. The supervisor then requires the authenticated dedicated health
    response to report `runnerReady=true` plus a heartbeat newer than the
    pre-start baseline. Only then mark the new credential active and remove

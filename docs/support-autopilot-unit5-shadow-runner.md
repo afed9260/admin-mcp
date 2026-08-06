@@ -104,6 +104,8 @@ rotation lock until the transient PowerShell helper exits, validates its exit
 code and returned PID, and terminates that exact helper before releasing the
 lock on timeout. It then scans for exact runner PIDs that were absent before
 the helper and contains any boundary-race child before the lock is released.
+Containment requests a bounded graceful drain, then force-stops the still
+matching exact runner process when it ignores that request.
 An existing runner is accepted only when the start script reports it fresh;
 an idle stale runner is drained and replaced through that same start script.
 

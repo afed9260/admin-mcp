@@ -543,6 +543,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(startRunner).toContain("Wait-SupportAutopilotProcessExit");
     expect(startRunner).toContain("Stop-SupportAutopilotProcess");
     expect(startRunner).toContain("Stop-SupportAutopilotPostTimeoutChildren");
+    expect(startRunner).toContain("Stop-Runner -StopTimeoutSeconds 5 -ForceAfterTimeout");
     expect(startRunner).toContain("runner_start_helper_timeout");
     expect(startRunner).toContain("runner_start_helper_pid_mismatch");
     const helperSource = script("support-autopilot-windows-process-helper.ps1");
@@ -551,7 +552,13 @@ describe("Windows support autopilot lifecycle scripts", () => {
 
   windowsIt("contains a detached runner appearing at the helper timeout boundary", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "support-autopilot-helper-race-"));
-    const entryPoint = path.join(root, "runner.cjs");
+    const entryPoint = path.join(
+      root,
+      "admin-mcp",
+      "dist",
+      "runner",
+      "support-autopilot-shadow-main.js",
+    );
     const stdinPath = path.join(root, "runner.stdin");
     const stdoutPath = path.join(root, "runner.stdout.log");
     const stderrPath = path.join(root, "runner.stderr.log");
@@ -560,12 +567,14 @@ describe("Windows support autopilot lifecycle scripts", () => {
     const harnessScript = path.join(root, "harness.ps1");
     const markerPath = path.join(root, "launched.json");
     const helperScript = path.resolve("scripts", "support-autopilot-windows-process-helper.ps1");
+    const stopScript = path.resolve("scripts", "stop-support-autopilot-shadow-runner.ps1");
     const launcherMain = path.resolve(
       "dist",
       "runner",
       "support-autopilot-windows-process-launcher-main.js",
     );
     const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    mkdirSync(path.dirname(entryPoint), { recursive: true });
     writeFileSync(entryPoint, "setInterval(() => {}, 1000);\r\n", "utf8");
     for (const streamPath of [stdinPath, stdoutPath, stderrPath]) {
       writeFileSync(streamPath, "", "utf8");
@@ -594,8 +603,11 @@ describe("Windows support autopilot lifecycle scripts", () => {
       `}.GetNewClosure()`,
       `$stopProcesses = {`,
       `  param($Processes)`,
-      `  foreach ($process in @($Processes)) { Stop-Process -Id $process.ProcessId -Force }`,
-      `}`,
+      `  $stopOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${quote(stopScript)} -InstallRoot ${quote(root)} -NodeExecutable ${quote(process.execPath)} -StopTimeoutSeconds 1 -ForceAfterTimeout`,
+      `  if ($LASTEXITCODE -ne 0) { throw 'production_stop_failed' }`,
+      `  $stopResult = ($stopOutput | Out-String).Trim() | ConvertFrom-Json`,
+      `  if ($stopResult.stopped -ne $true) { throw 'production_stop_rejected' }`,
+      `}.GetNewClosure()`,
       `$contained = Stop-SupportAutopilotPostTimeoutChildren -BaselineProcessIds @() -GetProcesses $getProcesses -StopProcesses $stopProcesses -SettleMilliseconds 1000`,
       `$remaining = @(& $getProcesses)`,
       `[pscustomobject]@{`,
