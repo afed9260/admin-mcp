@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import {
+  credentialTokenMatchesDigest,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
   selectCredentialRotationRun,
@@ -10,6 +12,8 @@ const REQUEST_ID = "10000000-0000-4000-8000-000000000001";
 const HEAD_SHA = "a".repeat(40);
 const ISSUED_AT = "2026-08-06T09:00:00.000Z";
 const EXPIRES_AT = "2026-08-07T08:00:00.000Z";
+const CREDENTIAL_ROOT = "C:\\support-autopilot\\credentials";
+const CANDIDATE_PATH = `${CREDENTIAL_ROOT}\\candidate-${REQUEST_ID}.dpapi`;
 
 describe("support autopilot credential supervisor policy", () => {
   it("parses strict generated metadata without accepting extra fields", () => {
@@ -31,11 +35,11 @@ describe("support autopilot credential supervisor policy", () => {
     })).toThrow("invalid generated credential metadata");
   });
 
-  it("rotates at the six-hour lead boundary but not before it", () => {
+  it("rotates only when fewer than six hours remain", () => {
     const metadata = { issuedAt: ISSUED_AT, expiresAt: EXPIRES_AT };
 
     expect(shouldRotateCredential(
-      metadata,
+      { ...metadata, tokenSha256: "b".repeat(64) },
       new Date("2026-08-07T02:00:00.000Z"),
     )).toBe(false);
     expect(shouldRotateCredential(
@@ -57,30 +61,81 @@ describe("support autopilot credential supervisor policy", () => {
         requestId: REQUEST_ID,
       },
     };
-    const serverAccepted = {
+    const candidate = {
+      requestId: REQUEST_ID,
+      candidatePath: CANDIDATE_PATH,
+      tokenSha256: "c".repeat(64),
+      issuedAt: ISSUED_AT,
+      expiresAt: EXPIRES_AT,
+    };
+    const stageStates = [
+      runnerStopped,
+      { ...base, pendingRotation: { ...candidate, stage: "candidate_ready" } },
+      {
+        ...base,
+        pendingRotation: {
+          ...candidate,
+          stage: "workflow_dispatched",
+          expectedHeadSha: HEAD_SHA,
+          workflowRunId: null,
+        },
+      },
+      {
+        ...base,
+        pendingRotation: {
+          ...candidate,
+          stage: "workflow_dispatched",
+          expectedHeadSha: HEAD_SHA,
+          workflowRunId: 123456,
+        },
+      },
+      {
       ...base,
       pendingRotation: {
+          ...candidate,
         stage: "server_accepted",
-        requestId: REQUEST_ID,
-        candidatePath: "C:\\support-autopilot\\credentials\\candidate.dpapi",
-        tokenSha256: "c".repeat(64),
-        issuedAt: ISSUED_AT,
-        expiresAt: EXPIRES_AT,
         expectedHeadSha: HEAD_SHA,
         workflowRunId: 123456,
       },
-    };
+      },
+      {
+        ...base,
+        pendingRotation: {
+          ...candidate,
+          stage: "candidate_promoted",
+          expectedHeadSha: HEAD_SHA,
+          workflowRunId: 123456,
+        },
+      },
+    ];
+    const serverAccepted = stageStates[4];
 
-    expect(parseCredentialRotationState(runnerStopped)).toEqual(runnerStopped);
-    expect(parseCredentialRotationState(serverAccepted)).toEqual(serverAccepted);
+    for (const state of stageStates) {
+      expect(parseCredentialRotationState(state, CREDENTIAL_ROOT)).toEqual(state);
+    }
     expect(() => parseCredentialRotationState({
       ...serverAccepted,
       pendingRotation: { ...serverAccepted.pendingRotation, rawToken: "forbidden" },
-    })).toThrow("invalid credential rotation state");
+    }, CREDENTIAL_ROOT)).toThrow("invalid credential rotation state");
     expect(() => parseCredentialRotationState({
       ...serverAccepted,
       pendingRotation: { ...serverAccepted.pendingRotation, workflowRunId: null },
-    })).toThrow("invalid credential rotation state");
+    }, CREDENTIAL_ROOT)).toThrow("invalid credential rotation state");
+    expect(() => parseCredentialRotationState({
+      ...serverAccepted,
+      pendingRotation: {
+        ...serverAccepted.pendingRotation,
+        candidatePath: `${CREDENTIAL_ROOT}\\..\\unrelated.dpapi`,
+      },
+    }, CREDENTIAL_ROOT)).toThrow("credential candidate path mismatch");
+  });
+
+  it("compares a decrypted candidate token to the expected digest", () => {
+    const token = "candidate-token-value";
+    const digest = createHash("sha256").update(token, "utf8").digest("hex");
+
+    expect(credentialTokenMatchesDigest(token, digest)).toBe(true);
+    expect(credentialTokenMatchesDigest(`${token}-wrong`, digest)).toBe(false);
   });
 
   it("selects exactly one successful workflow run at the expected main SHA", () => {
@@ -126,5 +181,7 @@ describe("support autopilot credential supervisor policy", () => {
       .toThrow("credential rotation run revision mismatch");
     expect(() => selectCredentialRotationRun([{ ...run, conclusion: "failure" }], expected))
       .toThrow("credential rotation run did not succeed");
+    expect(() => selectCredentialRotationRun([{ ...run, rawToken: "forbidden" }], expected))
+      .toThrow("invalid credential rotation run inventory");
   });
 });

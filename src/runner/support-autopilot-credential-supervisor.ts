@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+import { win32 } from "node:path";
 import { z } from "zod";
 
 const ROTATION_LEAD_MS = 6 * 60 * 60 * 1000;
@@ -89,18 +91,20 @@ const credentialRotationStateSchema = z.object({
   updatedAt: canonicalIso,
 }).strict();
 
+const credentialRotationRunSchema = z.object({
+  conclusion: z.string().nullable(),
+  databaseId: z.number().int().positive().safe(),
+  displayTitle: z.string(),
+  event: z.string(),
+  headBranch: z.string(),
+  headSha: z.string(),
+  status: z.string(),
+}).strict();
+
 export type GeneratedCredentialMetadata = z.infer<typeof generatedCredentialMetadataSchema>;
 export type CredentialRotationState = z.infer<typeof credentialRotationStateSchema>;
 
-export interface CredentialRotationRun {
-  conclusion: string | null;
-  databaseId: number;
-  displayTitle: string;
-  event: string;
-  headBranch: string;
-  headSha: string;
-  status: string;
-}
+export type CredentialRotationRun = z.infer<typeof credentialRotationRunSchema>;
 
 export function parseGeneratedCredentialMetadata(value: unknown): GeneratedCredentialMetadata {
   const parsed = generatedCredentialMetadataSchema.safeParse(value);
@@ -110,10 +114,23 @@ export function parseGeneratedCredentialMetadata(value: unknown): GeneratedCrede
   return parsed.data;
 }
 
-export function parseCredentialRotationState(value: unknown): CredentialRotationState {
+export function parseCredentialRotationState(
+  value: unknown,
+  credentialRoot: string,
+): CredentialRotationState {
   const parsed = credentialRotationStateSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error("invalid credential rotation state");
+  }
+
+  const root = normalizeCredentialRoot(credentialRoot);
+  const pending = parsed.data.pendingRotation;
+  if (pending !== null && "candidatePath" in pending) {
+    const expectedPath = win32.join(root, `candidate-${pending.requestId}.dpapi`);
+    if (win32.normalize(pending.candidatePath).toLocaleLowerCase("en-US")
+      !== expectedPath.toLocaleLowerCase("en-US")) {
+      throw new Error("credential candidate path mismatch");
+    }
   }
   return parsed.data;
 }
@@ -123,11 +140,32 @@ export function shouldRotateCredential(
   now = new Date(),
   leadTimeMs = ROTATION_LEAD_MS,
 ): boolean {
-  const parsed = credentialWindowSchema.parse(metadata);
+  const parsed = credentialWindowSchema.parse({
+    issuedAt: metadata.issuedAt,
+    expiresAt: metadata.expiresAt,
+  });
   if (!Number.isFinite(now.getTime()) || !Number.isSafeInteger(leadTimeMs) || leadTimeMs < 0) {
     throw new Error("invalid credential rotation clock");
   }
   return Date.parse(parsed.expiresAt) - now.getTime() < leadTimeMs;
+}
+
+export function credentialTokenMatchesDigest(token: string, expectedDigest: string): boolean {
+  if (
+    typeof token !== "string"
+    || token.length === 0
+    || token.length > 8192
+    || token.trim() !== token
+    || token.includes("\r")
+    || token.includes("\n")
+    || !SHA256_PATTERN.test(expectedDigest)
+  ) {
+    return false;
+  }
+
+  const actual = createHash("sha256").update(token, "utf8").digest();
+  const expected = Buffer.from(expectedDigest, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 export function credentialRotationRunTitle(requestId: string): string {
@@ -152,10 +190,11 @@ export function selectCredentialRotationRun(
   if (matches.length !== 1) {
     throw new Error("credential rotation run is ambiguous");
   }
-  const run = matches[0];
-  if (!isCredentialRotationRun(run)) {
+  const parsed = credentialRotationRunSchema.safeParse(matches[0]);
+  if (!parsed.success) {
     throw new Error("invalid credential rotation run inventory");
   }
+  const run = parsed.data;
   if (run.event !== "workflow_dispatch") {
     throw new Error("credential rotation run event mismatch");
   }
@@ -171,20 +210,15 @@ export function selectCredentialRotationRun(
   return run;
 }
 
-function isCredentialRotationRun(value: unknown): value is CredentialRotationRun {
-  if (!isRecord(value)) {
-    return false;
+function normalizeCredentialRoot(value: string): string {
+  if (
+    typeof value !== "string"
+    || !WINDOWS_ABSOLUTE_PATH_PATTERN.test(value)
+    || value.includes("\0")
+  ) {
+    throw new Error("invalid credential root");
   }
-  return (
-    Number.isSafeInteger(value.databaseId)
-    && Number(value.databaseId) > 0
-    && typeof value.displayTitle === "string"
-    && typeof value.event === "string"
-    && typeof value.headBranch === "string"
-    && typeof value.headSha === "string"
-    && typeof value.status === "string"
-    && (typeof value.conclusion === "string" || value.conclusion === null)
-  );
+  return win32.resolve(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
