@@ -172,10 +172,21 @@ export function credentialRotationRunTitle(requestId: string): string {
   if (!UUID_PATTERN.test(requestId)) {
     throw new Error("invalid credential rotation request id");
   }
-  return `Support Autopilot Credential Rotation / enable / ${requestId}`;
+  return `Support Autopilot Credential Rotation action=enable request_id=${requestId}`;
 }
 
 export function selectCredentialRotationRun(
+  runs: unknown,
+  expected: { requestId: string; expectedHeadSha: string },
+): CredentialRotationRun {
+  const run = locateCredentialRotationRun(runs, expected);
+  if (run.status !== "completed" || run.conclusion !== "success") {
+    throw new Error("credential rotation run did not succeed");
+  }
+  return run;
+}
+
+export function locateCredentialRotationRun(
   runs: unknown,
   expected: { requestId: string; expectedHeadSha: string },
 ): CredentialRotationRun {
@@ -203,9 +214,6 @@ export function selectCredentialRotationRun(
   }
   if (run.headSha !== expected.expectedHeadSha) {
     throw new Error("credential rotation run revision mismatch");
-  }
-  if (run.status !== "completed" || run.conclusion !== "success") {
-    throw new Error("credential rotation run did not succeed");
   }
   return run;
 }

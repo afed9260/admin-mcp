@@ -20,6 +20,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("shadow-runner.stderr.log");
     expect(source).toContain("Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN");
     expect(source).toContain("Remove-Item Env:ADMIN_API_TOKEN");
+    expect(source).toContain("rotation_pending");
+    expect(source).toContain("candidate_promoted");
+    expect(source).toContain("[switch]$AllowPendingPromotion");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
   });
@@ -57,5 +60,57 @@ describe("Windows support autopilot lifecycle scripts", () => {
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout.trim())).toMatchObject({ planOnly: true });
     }
+  });
+
+  it("rotates only through a locked recoverable journal and correlated workflow", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+
+    expect(source).toContain("[IO.File]::Open(");
+    expect(source).toContain("[IO.FileShare]::None");
+    expect(source).toContain("runner_stopped");
+    expect(source).toContain("candidate_ready");
+    expect(source).toContain("workflow_dispatched");
+    expect(source).toContain("server_accepted");
+    expect(source).toContain("candidate_promoted");
+    expect(source).toContain("support-autopilot-local-health-main.js");
+    expect(source).toContain("stop-support-autopilot-shadow-runner.ps1");
+    expect(source).toContain("new-support-autopilot-credential.ps1");
+    expect(source).toContain("support-autopilot-credential-supervisor-main.js");
+    expect(source).toContain("--request-id");
+    expect(source).toContain("--expected-sha");
+    expect(source).toContain("token_sha256");
+    expect(source).toContain("request_id");
+    expect(source).toContain("[IO.File]::Replace(");
+    expect(source).toContain("support-autopilot.rollback.dpapi");
+    expect(source).not.toContain("SUPPORT_AUTOPILOT_SERVICE_TOKEN=");
+    expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
+    expect(source).toContain("[switch]$PlanOnly");
+    expect(source).toContain("rotate-support-autopilot-credential");
+  });
+
+  it("installs two current-user scheduled tasks without a stored password", () => {
+    const source = script("install-support-autopilot-scheduled-tasks.ps1");
+
+    expect(source).toContain("Sdelka Support Autopilot Watchdog");
+    expect(source).toContain("Sdelka Support Autopilot Credential Supervisor");
+    expect(source).toContain("<LogonType>InteractiveToken</LogonType>");
+    expect(source).toContain("<RunLevel>LeastPrivilege</RunLevel>");
+    expect(source).toContain("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>");
+    expect(source).toContain("<StartWhenAvailable>true</StartWhenAvailable>");
+    expect(source).toContain("<Interval>$Interval</Interval>");
+    expect(source).toContain("interval = 'PT5M'");
+    expect(source).toContain("interval = 'PT1H'");
+    expect(source).toContain("Register-ScheduledTask");
+    expect(source).not.toMatch(/-Password\b/i);
+    expect(source).toContain("[switch]$PlanOnly");
+  });
+
+  it("uninstalls only the two exact task names", () => {
+    const source = script("uninstall-support-autopilot-scheduled-tasks.ps1");
+
+    expect(source).toContain("Sdelka Support Autopilot Watchdog");
+    expect(source).toContain("Sdelka Support Autopilot Credential Supervisor");
+    expect(source).toContain("Unregister-ScheduledTask");
+    expect(source).toContain("[switch]$PlanOnly");
   });
 });

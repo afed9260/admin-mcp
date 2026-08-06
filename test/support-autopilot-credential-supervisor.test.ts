@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
   credentialTokenMatchesDigest,
+  locateCredentialRotationRun,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
   selectCredentialRotationRun,
@@ -139,7 +140,7 @@ describe("support autopilot credential supervisor policy", () => {
   });
 
   it("selects exactly one successful workflow run at the expected main SHA", () => {
-    const title = `Support Autopilot Credential Rotation / enable / ${REQUEST_ID}`;
+    const title = `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`;
     const run = {
       databaseId: 42,
       displayTitle: title,
@@ -156,8 +157,25 @@ describe("support autopilot credential supervisor policy", () => {
     })).toEqual(run);
   });
 
+  it("locates the exact in-progress run before completion", () => {
+    const run = {
+      conclusion: null,
+      databaseId: 42,
+      displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
+      event: "workflow_dispatch",
+      headBranch: "main",
+      headSha: HEAD_SHA,
+      status: "in_progress",
+    };
+
+    expect(locateCredentialRotationRun([run], {
+      requestId: REQUEST_ID,
+      expectedHeadSha: HEAD_SHA,
+    })).toEqual(run);
+  });
+
   it("fails closed for missing, ambiguous, stale, or unsuccessful runs", () => {
-    const title = `Support Autopilot Credential Rotation / enable / ${REQUEST_ID}`;
+    const title = `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`;
     const run = {
       databaseId: 42,
       displayTitle: title,

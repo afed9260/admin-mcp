@@ -2,6 +2,7 @@
 param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
   [string]$NodeExecutable = '',
+  [switch]$AllowPendingPromotion,
   [switch]$PlanOnly
 )
 
@@ -16,6 +17,9 @@ $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
 $EntryPoint = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-shadow-main.js'
 $StateRoot = Join-Path $InstallRoot 'state'
+$StatePath = Join-Path $StateRoot 'credential-rotation.json'
+$CredentialRoot = Join-Path $InstallRoot 'credentials'
+$SupervisorMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-credential-supervisor-main.js'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
 $StderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
 
@@ -38,9 +42,40 @@ if ($PlanOnly) {
     entryPoint = $EntryPoint
     installRoot = $InstallRoot
     planOnly = $true
+    stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
   } | ConvertTo-Json -Compress
   exit 0
 }
+
+if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
+  [pscustomobject]@{ reason = 'credential_state_missing'; started = $false } |
+    ConvertTo-Json -Compress
+  exit 0
+}
+foreach ($requiredPath in @($NodeExecutable, $EntryPoint, $SupervisorMain)) {
+  if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+    throw "required runner file is missing"
+  }
+}
+$validation = & $NodeExecutable $SupervisorMain `
+  validate-state `
+  --state $StatePath `
+  --credential-root $CredentialRoot 2>$null
+if ($LASTEXITCODE -ne 0) {
+  throw 'credential rotation state is invalid'
+}
+$rotationState = Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8 |
+  ConvertFrom-Json
+if ($null -ne $rotationState.pendingRotation) {
+  $promotionAllowed = $AllowPendingPromotion -and
+    $rotationState.pendingRotation.stage -eq 'candidate_promoted'
+  if (-not $promotionAllowed) {
+    [pscustomobject]@{ reason = 'rotation_pending'; started = $false } |
+      ConvertTo-Json -Compress
+    exit 0
+  }
+}
+
 if ($existing.Count -gt 0) {
   [pscustomobject]@{
     processIds = @($existing.ProcessId)
@@ -50,11 +85,6 @@ if ($existing.Count -gt 0) {
   exit 0
 }
 
-foreach ($requiredPath in @($NodeExecutable, $EntryPoint)) {
-  if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
-    throw "required runner file is missing"
-  }
-}
 if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
   New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
 }
@@ -87,6 +117,9 @@ $env:SUPPORT_AUTOPILOT_PROCESS_TIMEOUT_MS = '600000'
 $env:SUPPORT_AUTOPILOT_BUDGET_STATE_PATH = Join-Path $StateRoot 'daily-budget.json'
 $env:SUPPORT_AUTOPILOT_MCP_LAUNCHER_PATH = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-mcp-launcher.js'
 $env:ADMIN_API_BASE_URL = 'https://malikbot.ru/new-admin'
+
+[IO.File]::WriteAllText($StdoutPath, '', [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($StderrPath, '', [Text.UTF8Encoding]::new($false))
 
 $process = Start-Process `
   -FilePath $NodeExecutable `
