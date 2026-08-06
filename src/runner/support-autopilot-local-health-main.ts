@@ -43,6 +43,7 @@ export interface SupportAutopilotLocalHealth {
   privacyGatePassed: boolean;
   reachable: true;
   runnerFresh: boolean;
+  runnerLastSeenAt: string | null;
   runnerReady: boolean;
   shadowModeEnabled: boolean;
 }
@@ -93,6 +94,7 @@ export async function runSupportAutopilotLocalHealth(
       privacyGatePassed: health.privacyGatePassed,
       reachable: true,
       runnerFresh,
+      runnerLastSeenAt: health.runnerLastSeenAt,
       runnerReady: health.runnerReady,
       shadowModeEnabled: health.shadowModeEnabled,
     };

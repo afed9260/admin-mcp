@@ -215,6 +215,7 @@ function Get-ExactRunnerProcess {
 
 function Start-Runner {
   param([switch]$PromotionMode)
+  $heartbeatBaseline = (Get-QueueHealth).runnerLastSeenAt
   $arguments = @(
     '-NoProfile',
     '-NonInteractive',
@@ -234,6 +235,17 @@ function Start-Runner {
   $result = ($output | Out-String).Trim() | ConvertFrom-Json
   if ($result.started -ne $true -and $result.reason -ne 'already_running') {
     throw 'runner_start_refused'
+  }
+  if (
+    $result.started -eq $true -and
+    ($null -eq $result.processId -or [long]$result.processId -le 0)
+  ) {
+    throw 'runner_start_result_invalid'
+  }
+  return [pscustomobject]@{
+    heartbeatBaseline = $heartbeatBaseline
+    processId = if ($result.started -eq $true) { [long]$result.processId } else { 0 }
+    started = $result.started -eq $true
   }
 }
 
@@ -262,6 +274,8 @@ function Wait-PostStopLeaseDrain {
 }
 
 function Wait-RunnerReady {
+  param([Parameter(Mandatory = $true)]$StartResult)
+
   $deadline = [DateTimeOffset]::UtcNow.AddMinutes(2)
   do {
     Start-Sleep -Seconds 2
@@ -270,7 +284,23 @@ function Wait-RunnerReady {
       try {
         $health = Get-QueueHealth
         Assert-QueueGatesReady $health
-        return
+        $expectedProcess = $StartResult.started -ne $true -or
+          [long]$running[0].ProcessId -eq [long]$StartResult.processId
+        $heartbeatAdvanced = $StartResult.started -ne $true
+        if (
+          -not $heartbeatAdvanced -and
+          -not [string]::IsNullOrWhiteSpace([string]$health.runnerLastSeenAt)
+        ) {
+          $heartbeatAdvanced = [string]::IsNullOrWhiteSpace(
+            [string]$StartResult.heartbeatBaseline
+          ) -or (
+            ([DateTimeOffset]$health.runnerLastSeenAt) -gt
+            ([DateTimeOffset]$StartResult.heartbeatBaseline)
+          )
+        }
+        if ($expectedProcess -and $heartbeatAdvanced) {
+          return
+        }
       }
       catch {
         if (
@@ -524,8 +554,8 @@ try {
     throw 'credential_state_seed_required'
   }
   if (-not $decision.pendingRotation -and -not $decision.rotate -and -not $ForceRotation) {
-    Start-Runner
-    Wait-RunnerReady
+    $runnerStart = Start-Runner
+    Wait-RunnerReady -StartResult $runnerStart
     Write-SupportAutopilotRedactedEvent `
       -EventPath $EventPath `
       -EventCode 'credential_supervisor_healthy' `
@@ -610,8 +640,8 @@ try {
           -EventCode 'credential_rotation_precheck' `
           -Outcome 'runner_drained'
         if (-not (Wait-PostStopLeaseDrain)) {
-          Start-Runner
-          Wait-RunnerReady
+          $runnerStart = Start-Runner
+          Wait-RunnerReady -StartResult $runnerStart
           Write-SupportAutopilotRedactedEvent `
             -EventPath $EventPath `
             -EventCode 'credential_rotation_deferred' `
@@ -847,8 +877,8 @@ try {
           Remove-Item -LiteralPath $pending.candidatePath -Force
         }
         Write-RotationState (New-StateForStage $state $null)
-        Start-Runner
-        Wait-RunnerReady
+        $runnerStart = Start-Runner
+        Wait-RunnerReady -StartResult $runnerStart
         Write-SupportAutopilotRedactedEvent `
           -EventPath $EventPath `
           -EventCode 'credential_rotation_recovered' `
@@ -952,8 +982,8 @@ try {
       Assert-CandidateDigest `
         -CandidatePath $ActiveCredentialPath `
         -Digest ([string]$pending.tokenSha256)
-      Start-Runner -PromotionMode
-      Wait-RunnerReady
+      $runnerStart = Start-Runner -PromotionMode
+      Wait-RunnerReady -StartResult $runnerStart
       $finalState = [ordered]@{
         schemaVersion = 1
         activeCredential = [ordered]@{
