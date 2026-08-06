@@ -224,17 +224,7 @@ function Start-Runner {
   if ($existing.Count -gt 1) {
     throw 'multiple_exact_runner_processes'
   }
-  if ($existing.Count -eq 1) {
-    Write-SupportAutopilotRedactedEvent `
-      -EventPath $EventPath `
-      -EventCode 'runner_start_confirmed' `
-      -Outcome 'already_running'
-    return [pscustomobject]@{
-      heartbeatBaseline = $heartbeatBaseline
-      processId = 0
-      started = $false
-    }
-  }
+  $baselineProcessIds = @($existing | ForEach-Object { [long]$_.ProcessId })
 
   $arguments = @(
     '-NoProfile',
@@ -260,24 +250,8 @@ function Start-Runner {
     -RedirectStandardError $RunnerStartStderrPath `
     -PassThru
   $null = $helper.Handle
-  $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
-  $launched = @()
   try {
-    do {
-      Start-Sleep -Milliseconds 100
-      $launched = @(Get-ExactRunnerProcess)
-      if ($launched.Count -gt 1) {
-        throw 'multiple_exact_runner_processes'
-      }
-      if ($launched.Count -eq 1) {
-        break
-      }
-    } while ([DateTimeOffset]::UtcNow -lt $deadline)
-    if ($launched.Count -ne 1) {
-      throw 'runner_start_not_observed'
-    }
-    if (-not (Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 5)) {
-      Stop-SupportAutopilotProcess -Process $helper
+    if (-not (Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 900)) {
       throw 'runner_start_helper_timeout'
     }
     $helper.Refresh()
@@ -292,37 +266,93 @@ function Start-Runner {
       throw 'runner_start_helper_output_invalid'
     }
     $helperResult = $helperLines[0] | ConvertFrom-Json
-    if (
-      $helperResult.started -ne $true -or
-      [long]$helperResult.processId -ne [long]$launched[0].ProcessId
-    ) {
+    $running = @(Get-ExactRunnerProcess)
+    if ($running.Count -gt 1) {
+      throw 'multiple_exact_runner_processes'
+    }
+    $startedNew = $helperResult.started -eq $true
+    $confirmedExisting = $helperResult.started -eq $false -and
+      [string]$helperResult.reason -eq 'already_running'
+    if (-not $startedNew -and -not $confirmedExisting) {
+      throw 'runner_start_helper_rejected'
+    }
+    if ($running.Count -ne 1) {
+      throw 'runner_start_not_observed'
+    }
+    $reportedProcessId = if ($startedNew) {
+      [long]$helperResult.processId
+    }
+    else {
+      $reportedIds = @($helperResult.processIds)
+      if ($reportedIds.Count -ne 1) {
+        throw 'runner_start_helper_pid_mismatch'
+      }
+      [long]$reportedIds[0]
+    }
+    if ($reportedProcessId -ne [long]$running[0].ProcessId) {
       throw 'runner_start_helper_pid_mismatch'
     }
   }
   catch {
-    $helperFailureOutcome = switch ($_.Exception.Message) {
+    $originalFailure = $_.Exception.Message
+    $helperStopFailed = $false
+    try {
+      Stop-SupportAutopilotProcess -Process $helper
+    }
+    catch {
+      $helperStopFailed = $true
+    }
+    $containmentFailed = $false
+    $containedChild = $false
+    try {
+      $containedChild = Stop-SupportAutopilotPostTimeoutChildren `
+        -BaselineProcessIds $baselineProcessIds `
+        -GetProcesses { @(Get-ExactRunnerProcess) } `
+        -StopProcesses {
+          param($Processes)
+          if (@($Processes).Count -gt 0) {
+            Stop-Runner
+          }
+        }
+    }
+    catch {
+      $containmentFailed = $true
+    }
+    if ($containedChild) {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'runner_start_child_contained' `
+        -Outcome 'post_timeout'
+    }
+    $helperFailureOutcome = switch ($originalFailure) {
       'runner_start_helper_timeout' { 'timeout' }
       'runner_start_helper_failed' { 'exit_code' }
       'runner_start_helper_output_invalid' { 'output_invalid' }
       'runner_start_helper_pid_mismatch' { 'pid_mismatch' }
-      'support_autopilot_process_stop_failed' { 'stop_failed' }
+      'runner_start_helper_rejected' { 'rejected' }
       default { 'fixed_failure' }
     }
     Write-SupportAutopilotRedactedEvent `
       -EventPath $EventPath `
       -EventCode 'runner_start_helper_failed' `
       -Outcome $helperFailureOutcome
-    Stop-SupportAutopilotProcess -Process $helper
-    throw
+    if ($containmentFailed) {
+      throw 'runner_start_timeout_containment_failed'
+    }
+    if ($helperStopFailed) {
+      throw 'runner_start_helper_stop_failed'
+    }
+    throw $originalFailure
   }
+  $startOutcome = if ($startedNew) { 'new_process' } else { 'already_running' }
   Write-SupportAutopilotRedactedEvent `
     -EventPath $EventPath `
     -EventCode 'runner_start_confirmed' `
-    -Outcome 'new_process'
+    -Outcome $startOutcome
   return [pscustomobject]@{
     heartbeatBaseline = $heartbeatBaseline
-    processId = [long]$launched[0].ProcessId
-    started = $true
+    processId = $reportedProcessId
+    started = $startedNew
   }
 }
 
@@ -361,8 +391,7 @@ function Wait-RunnerReady {
       try {
         $health = Get-QueueHealth
         Assert-QueueGatesReady $health
-        $expectedProcess = $StartResult.started -ne $true -or
-          [long]$running[0].ProcessId -eq [long]$StartResult.processId
+        $expectedProcess = [long]$running[0].ProcessId -eq [long]$StartResult.processId
         $heartbeatAdvanced = $StartResult.started -ne $true
         if (
           -not $heartbeatAdvanced -and

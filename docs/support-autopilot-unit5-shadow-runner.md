@@ -102,7 +102,10 @@ runner process, returns its PID, and exits. The supervisor does not synchronousl
 wait on a PowerShell process that owns the long-lived runner. It retains the
 rotation lock until the transient PowerShell helper exits, validates its exit
 code and returned PID, and terminates that exact helper before releasing the
-lock on timeout.
+lock on timeout. It then scans for exact runner PIDs that were absent before
+the helper and contains any boundary-race child before the lock is released.
+An existing runner is accepted only when the start script reports it fresh;
+an idle stale runner is drained and replaced through that same start script.
 
 Build the reviewed checkout and inspect the no-mutation plans first:
 
