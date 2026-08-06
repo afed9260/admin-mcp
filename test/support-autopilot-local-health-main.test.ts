@@ -51,13 +51,36 @@ describe("runSupportAutopilotLocalHealth", () => {
       secretProvider: { read },
     })).resolves.toEqual({
       activeLeases: 0,
+      claimsEnabled: true,
+      gatesReady: true,
+      jobCreationEnabled: true,
       pendingJobs: 2,
+      privacyGatePassed: true,
       reachable: true,
+      runnerReady: true,
+      shadowModeEnabled: true,
     });
 
     expect(read).toHaveBeenCalledWith(enabledConfig.credentialBlobPath);
     expect(apiClientFactory).toHaveBeenCalledWith(enabledConfig, "raw-service-token");
     expect(get).toHaveBeenCalledWith("/support-automation/health");
+  });
+
+  it("reports false readiness when a server gate or attestation does not match", async () => {
+    await expect(runSupportAutopilotLocalHealth({}, {
+      apiClientFactory: () => ({
+        get: vi.fn().mockResolvedValue({
+          ...validHealth,
+          claimsEnabled: false,
+          privacyAttestationId: "different-attestation",
+        }),
+      }),
+      loadConfig: () => enabledConfig,
+      secretProvider: { read: vi.fn().mockResolvedValue("raw-service-token") },
+    })).resolves.toMatchObject({
+      claimsEnabled: false,
+      gatesReady: false,
+    });
   });
 
   it("rejects missing or additional provider response fields", async () => {

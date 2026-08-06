@@ -8,6 +8,17 @@ function script(name: string): string {
 }
 
 describe("Windows support autopilot lifecycle scripts", () => {
+  it("protects local state and writes only schema-bounded redacted events", () => {
+    const source = script("support-autopilot-windows-security.ps1");
+
+    expect(source).toContain("SetAccessRuleProtection($true, $false)");
+    expect(source).toContain("FileSystemRights]::FullControl");
+    expect(source).toContain("Assert-NoSupportAutopilotPlaintextTokenEnvironment");
+    expect(source).toContain("Write-SupportAutopilotRedactedEvent");
+    expect(source).toContain("credential-rotation.events.jsonl");
+    expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
+  });
+
   it("starts one exact hidden runner process with redacted fixed log paths", () => {
     const source = script("start-support-autopilot-shadow-runner.ps1");
 
@@ -18,8 +29,8 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toMatch(/-WindowStyle\s+Hidden/);
     expect(source).toContain("shadow-runner.stdout.log");
     expect(source).toContain("shadow-runner.stderr.log");
-    expect(source).toContain("Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN");
-    expect(source).toContain("Remove-Item Env:ADMIN_API_TOKEN");
+    expect(source).not.toContain("Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN");
+    expect(source).not.toContain("Remove-Item Env:ADMIN_API_TOKEN");
     expect(source).toContain("rotation_pending");
     expect(source).toContain("candidate_promoted");
     expect(source).toContain("[switch]$AllowPendingPromotion");
@@ -28,6 +39,9 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("[IO.FileShare]::None");
     expect(source).toContain("rotation_lock_held");
     expect(source).toContain("credential_state_seed_required");
+    expect(source).toContain("support-autopilot-windows-security.ps1");
+    expect(source).toContain("Assert-NoSupportAutopilotPlaintextTokenEnvironment");
+    expect(source).toContain("SUPPORT_AUTOPILOT_RUNNER_START_FAILED");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
   });
@@ -91,6 +105,34 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
     expect(source).toContain("rotate-support-autopilot-credential");
+    expect(source).toContain("support-autopilot-windows-security.ps1");
+    expect(source).toContain("Write-SupportAutopilotRedactedEvent");
+    expect(source).toContain("SUPPORT_AUTOPILOT_CREDENTIAL_SUPERVISOR_FAILED");
+    expect(source).toContain("'recovery-action'");
+  });
+
+  it("orders interruption recovery before every irreversible boundary", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const stateMachine = source.slice(source.indexOf("$state = Get-RotationState"));
+    const runnerStopped = stateMachine.slice(stateMachine.indexOf("if ($pending.stage -eq 'runner_stopped')"));
+    const dispatchPrepared = stateMachine.slice(stateMachine.indexOf("if ($pending.stage -eq 'dispatch_prepared')"));
+
+    expect(stateMachine.indexOf("Stop-Runner")).toBeLessThan(
+      stateMachine.indexOf("Wait-PostStopLeaseDrain"),
+    );
+    expect(stateMachine.indexOf("Wait-PostStopLeaseDrain")).toBeLessThan(
+      stateMachine.indexOf("stage = 'runner_stopped'"),
+    );
+    expect(runnerStopped.indexOf("Remove-Item -LiteralPath $candidatePath")).toBeLessThan(
+      runnerStopped.indexOf("-File $CredentialGenerator"),
+    );
+    expect(stateMachine.indexOf("stage = 'dispatch_prepared'")).toBeLessThan(
+      stateMachine.indexOf("& gh.exe workflow run"),
+    );
+    expect(dispatchPrepared.indexOf("Find-CorrelatedWorkflow")).toBeLessThan(
+      dispatchPrepared.indexOf("& gh.exe workflow run"),
+    );
+    expect(stateMachine).toContain("missing_after_server_acceptance");
   });
 
   it("installs two current-user scheduled tasks without a stored password", () => {

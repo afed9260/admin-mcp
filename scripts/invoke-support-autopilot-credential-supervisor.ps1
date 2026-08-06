@@ -18,6 +18,8 @@ if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
 }
 $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
+$SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
+. $SecurityScript
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $ActiveCredentialPath = Join-Path $CredentialRoot 'support-autopilot.dpapi'
 $RollbackCredentialPath = Join-Path $CredentialRoot 'support-autopilot.rollback.dpapi'
@@ -31,6 +33,21 @@ $StartScript = Join-Path $AdminMcpRoot 'scripts\start-support-autopilot-shadow-r
 $StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-runner.ps1'
 $CredentialGenerator = Join-Path $AdminMcpRoot 'scripts\new-support-autopilot-credential.ps1'
 $InventoryPath = Join-Path $StateRoot 'credential-workflow-runs.json'
+$EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
+
+trap {
+  try {
+    if (Test-Path -LiteralPath $StateRoot -PathType Container) {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_supervisor_failed' `
+        -Outcome 'fixed_failure'
+    }
+  }
+  catch {}
+  [Console]::Error.WriteLine('SUPPORT_AUTOPILOT_CREDENTIAL_SUPERVISOR_FAILED')
+  exit 1
+}
 
 function ConvertTo-CanonicalUtc {
   param([DateTimeOffset]$Value = [DateTimeOffset]::UtcNow)
@@ -55,6 +72,7 @@ function Write-RotationState {
   try {
     $json = $State | ConvertTo-Json -Depth 8 -Compress
     [IO.File]::WriteAllText($temporaryPath, $json, [Text.UTF8Encoding]::new($false))
+    Set-SupportAutopilotCurrentUserAcl -Path $temporaryPath
     Invoke-SupervisorCommand @(
       'validate-state',
       '--state', $temporaryPath,
@@ -66,6 +84,7 @@ function Write-RotationState {
     else {
       Move-Item -LiteralPath $temporaryPath -Destination $StatePath
     }
+    Set-SupportAutopilotCurrentUserAcl -Path $StatePath
   }
   finally {
     if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
@@ -100,8 +119,6 @@ function Set-RunnerEnvironment {
   $attestationPath = Join-Path $StateRoot 'privacy-attestation.json'
   $attestation = Get-Content -LiteralPath $attestationPath -Raw -Encoding UTF8 |
     ConvertFrom-Json
-  Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN -ErrorAction SilentlyContinue
-  Remove-Item Env:ADMIN_API_TOKEN -ErrorAction SilentlyContinue
   $env:SUPPORT_AUTOPILOT_SHADOW_RUNNER_ENABLED = 'true'
   $env:SUPPORT_AUTOPILOT_CODEX_EXECUTABLE = Join-Path $InstallRoot 'standalone-codex\node_modules\@openai\codex\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe'
   $env:SUPPORT_AUTOPILOT_NODE_EXECUTABLE = $NodeExecutable
@@ -126,6 +143,13 @@ function Get-QueueHealth {
     throw 'support_autopilot_health_failed'
   }
   return ($output | Out-String).Trim() | ConvertFrom-Json
+}
+
+function Assert-QueueGatesReady {
+  param([Parameter(Mandatory = $true)]$Health)
+  if ($Health.gatesReady -ne $true) {
+    throw 'support_autopilot_gates_not_ready'
+  }
 }
 
 function Get-ExactRunnerProcess {
@@ -174,6 +198,18 @@ function Stop-Runner {
   }
 }
 
+function Wait-PostStopLeaseDrain {
+  $deadline = [DateTimeOffset]::UtcNow.AddMinutes(15)
+  do {
+    $health = Get-QueueHealth
+    if ([long]$health.activeLeases -eq 0) {
+      return $true
+    }
+    Start-Sleep -Seconds 5
+  } while ([DateTimeOffset]::UtcNow -lt $deadline)
+  return $false
+}
+
 function Wait-RunnerReady {
   $readyEvent = '"eventCode":"shadow_runner_ready"'
   $stderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
@@ -191,7 +227,8 @@ function Wait-RunnerReady {
       }
     }
     if ($running.Count -eq 1 -and $readyLogged) {
-      Get-QueueHealth | Out-Null
+      $health = Get-QueueHealth
+      Assert-QueueGatesReady $health
       return
     }
   } while ([DateTimeOffset]::UtcNow -lt $deadline)
@@ -222,37 +259,53 @@ function Save-WorkflowInventory {
     ($json | Out-String).Trim(),
     [Text.UTF8Encoding]::new($false)
   )
+  Set-SupportAutopilotCurrentUserAcl -Path $InventoryPath
 }
 
-function Wait-CorrelatedWorkflow {
+function Find-CorrelatedWorkflow {
   param(
     [Parameter(Mandatory = $true)][string]$RequestId,
-    [Parameter(Mandatory = $true)][string]$ExpectedHeadSha
+    [Parameter(Mandatory = $true)][string]$ExpectedHeadSha,
+    [ValidateRange(1, 15)][int]$WaitMinutes = 5
   )
   $located = $null
-  $deadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
+  $deadline = [DateTimeOffset]::UtcNow.AddMinutes($WaitMinutes)
   do {
     Save-WorkflowInventory
-    try {
-      $located = Invoke-SupervisorCommand @(
-        'locate-run',
-        '--inventory', $InventoryPath,
-        '--request-id', $RequestId,
-        '--expected-sha', $ExpectedHeadSha
-      )
-    }
-    catch {
+    $probe = Invoke-SupervisorCommand @(
+      'probe-run',
+      '--inventory', $InventoryPath,
+      '--request-id', $RequestId,
+      '--expected-sha', $ExpectedHeadSha
+    )
+    $foundProperty = $probe.PSObject.Properties['found']
+    if ($null -ne $foundProperty -and $foundProperty.Value -eq $false) {
       $located = $null
+    }
+    else {
+      $located = $probe
     }
     if ($null -eq $located) {
       Start-Sleep -Seconds 5
     }
   } while ($null -eq $located -and [DateTimeOffset]::UtcNow -lt $deadline)
-  if ($null -eq $located) {
-    throw 'correlated_workflow_not_found'
-  }
+  return $located
+}
 
-  & gh.exe run watch ([string]$located.workflowRunId) --repo $Repository --exit-status 2>$null |
+function Complete-CorrelatedWorkflow {
+  param(
+    [Parameter(Mandatory = $true)][string]$RequestId,
+    [Parameter(Mandatory = $true)][string]$ExpectedHeadSha,
+    [Parameter(Mandatory = $true)][long]$WorkflowRunId
+  )
+  $located = Find-CorrelatedWorkflow `
+    -RequestId $RequestId `
+    -ExpectedHeadSha $ExpectedHeadSha `
+    -WaitMinutes 5
+  if ($null -eq $located -or [long]$located.workflowRunId -ne $WorkflowRunId) {
+    throw 'correlated_workflow_changed'
+  }
+  & gh.exe run watch ([string]$WorkflowRunId) --repo $Repository --exit-status 2>$null |
     Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw 'correlated_workflow_failed'
@@ -264,10 +317,10 @@ function Wait-CorrelatedWorkflow {
     '--request-id', $RequestId,
     '--expected-sha', $ExpectedHeadSha
   )
-  if ([long]$completed.workflowRunId -ne [long]$located.workflowRunId) {
+  if ([long]$completed.workflowRunId -ne $WorkflowRunId) {
     throw 'correlated_workflow_changed'
   }
-  return [long]$completed.workflowRunId
+  return $WorkflowRunId
 }
 
 function Assert-CandidateDigest {
@@ -298,6 +351,7 @@ if ($ForceRotation -and $ConfirmForceRotation -ne 'rotate-support-autopilot-cred
 
 foreach ($requiredPath in @(
   $NodeExecutable,
+  $SecurityScript,
   $SupervisorMain,
   $HealthMain,
   $RunnerEntryPoint,
@@ -317,6 +371,8 @@ if ($null -eq (Get-Command gh.exe -ErrorAction SilentlyContinue)) {
 
 $lockStream = $null
 try {
+  Set-SupportAutopilotCurrentUserAcl -Path $StateRoot -Container
+  Set-SupportAutopilotCurrentUserAcl -Path $StatePath
   $lockDeadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
   do {
     try {
@@ -334,6 +390,16 @@ try {
   if ($null -eq $lockStream) {
     throw 'credential_rotation_lock_unavailable'
   }
+  try {
+    Assert-NoSupportAutopilotPlaintextTokenEnvironment
+  }
+  catch {
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'credential_rotation_blocked' `
+      -Outcome 'plaintext_environment'
+    throw 'plaintext_token_environment_present'
+  }
 
   $decisionArguments = @(
     'decision',
@@ -348,16 +414,28 @@ try {
   if (-not $decision.pendingRotation -and -not $decision.rotate -and -not $ForceRotation) {
     Start-Runner
     Wait-RunnerReady
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'credential_supervisor_healthy' `
+      -Outcome 'no_rotation_due'
     [pscustomobject]@{ outcome = 'healthy'; rotated = $false } |
       ConvertTo-Json -Compress
     exit 0
   }
 
   $state = Get-RotationState
+  $candidateCreatedThisRun = $false
+  $dispatchPreparedThisRun = $false
   while ($true) {
     if ($null -eq $state.pendingRotation) {
       $health = Get-QueueHealth
+      Assert-QueueGatesReady $health
       if ([long]$health.activeLeases -ne 0) {
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'credential_rotation_deferred' `
+          -Outcome 'active_lease' `
+          -ActiveLeases ([long]$health.activeLeases)
         [pscustomobject]@{
           activeLeases = [long]$health.activeLeases
           outcome = 'deferred_active_work'
@@ -369,19 +447,54 @@ try {
         throw 'exact_runner_process_missing'
       }
       Stop-Runner
+      if (-not (Wait-PostStopLeaseDrain)) {
+        Start-Runner
+        Wait-RunnerReady
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'credential_rotation_deferred' `
+          -Outcome 'post_stop_active_lease'
+        [pscustomobject]@{
+          outcome = 'deferred_post_stop_active_work'
+          rotated = $false
+        } | ConvertTo-Json -Compress
+        exit 0
+      }
       $requestId = [Guid]::NewGuid().ToString('D').ToLowerInvariant()
       Write-RotationState (New-StateForStage $state ([ordered]@{
         stage = 'runner_stopped'
         requestId = $requestId
       }))
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId $requestId `
+        -Stage 'runner_stopped'
       $state = Get-RotationState
       continue
     }
 
     $pending = $state.pendingRotation
+    $recovery = Invoke-SupervisorCommand @(
+      'recovery-action',
+      '--state', $StatePath,
+      '--credential-root', $CredentialRoot,
+      '--active-path', $ActiveCredentialPath
+    )
     if ($pending.stage -eq 'runner_stopped') {
       $candidatePath = Join-Path $CredentialRoot ("candidate-$($pending.requestId).dpapi")
       $metadataPath = Join-Path $StateRoot ("candidate-$($pending.requestId).json")
+      if ($recovery.action -eq 'remove_orphan_candidate') {
+        Remove-Item -LiteralPath $candidatePath -Force
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'orphan_candidate_removed' `
+          -RequestId ([string]$pending.requestId) `
+          -Stage 'runner_stopped'
+      }
+      elseif ($recovery.action -ne 'generate_candidate') {
+        throw 'unexpected_runner_stopped_recovery_action'
+      }
       try {
         $metadataJson = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
           -File $CredentialGenerator -OutputPath $candidatePath
@@ -393,6 +506,7 @@ try {
           ($metadataJson | Out-String).Trim(),
           [Text.UTF8Encoding]::new($false)
         )
+        Set-SupportAutopilotCurrentUserAcl -Path $metadataPath
         Invoke-SupervisorCommand @(
           'validate-generated',
           '--metadata', $metadataPath
@@ -413,23 +527,88 @@ try {
         issuedAt = [string]$metadata.issuedAt
         expiresAt = [string]$metadata.expiresAt
       }))
+      $candidateCreatedThisRun = $true
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId ([string]$pending.requestId) `
+        -Stage 'candidate_ready'
       $state = Get-RotationState
       continue
     }
 
     if ($pending.stage -eq 'candidate_ready') {
+      if ($recovery.action -eq 'restart_with_fresh_candidate') {
+        $replacementRequestId = [Guid]::NewGuid().ToString('D').ToLowerInvariant()
+        Write-RotationState (New-StateForStage $state ([ordered]@{
+          stage = 'runner_stopped'
+          requestId = $replacementRequestId
+        }))
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'candidate_recovery_started' `
+          -RequestId $replacementRequestId `
+          -Outcome 'missing_before_dispatch'
+        $state = Get-RotationState
+        continue
+      }
+      if ($recovery.action -ne 'prepare_dispatch') {
+        throw 'unexpected_candidate_ready_recovery_action'
+      }
+      Assert-CandidateDigest `
+        -CandidatePath ([string]$pending.candidatePath) `
+        -Digest ([string]$pending.tokenSha256)
       $expectedHeadSha = Get-MainSha
       Write-RotationState (New-StateForStage $state ([ordered]@{
-        stage = 'workflow_dispatched'
+        stage = 'dispatch_prepared'
         requestId = [string]$pending.requestId
         candidatePath = [string]$pending.candidatePath
         tokenSha256 = [string]$pending.tokenSha256
         issuedAt = [string]$pending.issuedAt
         expiresAt = [string]$pending.expiresAt
         expectedHeadSha = $expectedHeadSha
-        workflowRunId = $null
       }))
-      & gh.exe workflow run $Workflow `
+      $dispatchPreparedThisRun = $candidateCreatedThisRun
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId ([string]$pending.requestId) `
+        -Stage 'dispatch_prepared'
+      $state = Get-RotationState
+      continue
+    }
+
+    if ($pending.stage -eq 'dispatch_prepared') {
+      if ($recovery.action -eq 'restart_with_fresh_candidate') {
+        $replacementRequestId = [Guid]::NewGuid().ToString('D').ToLowerInvariant()
+        Write-RotationState (New-StateForStage $state ([ordered]@{
+          stage = 'runner_stopped'
+          requestId = $replacementRequestId
+        }))
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'candidate_recovery_started' `
+          -RequestId $replacementRequestId `
+          -Outcome 'missing_before_dispatch'
+        $state = Get-RotationState
+        continue
+      }
+      if ($recovery.action -ne 'inspect_correlated_workflow') {
+        throw 'unexpected_dispatch_prepared_recovery_action'
+      }
+      Assert-CandidateDigest `
+        -CandidatePath ([string]$pending.candidatePath) `
+        -Digest ([string]$pending.tokenSha256)
+
+      $located = $null
+      if (-not $dispatchPreparedThisRun) {
+        $located = Find-CorrelatedWorkflow `
+          -RequestId ([string]$pending.requestId) `
+          -ExpectedHeadSha ([string]$pending.expectedHeadSha) `
+          -WaitMinutes 5
+      }
+      if ($null -eq $located) {
+        & gh.exe workflow run $Workflow `
         --repo $Repository `
         --ref main `
         -f 'action=enable' `
@@ -438,18 +617,46 @@ try {
         -f "issued_at=$($pending.issuedAt)" `
         -f "expires_at=$($pending.expiresAt)" `
         -f 'confirm=enable-support-autopilot-credential' 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        throw 'workflow_dispatch_failed'
+        if ($LASTEXITCODE -ne 0) {
+          throw 'workflow_dispatch_failed'
+        }
+        $located = Find-CorrelatedWorkflow `
+          -RequestId ([string]$pending.requestId) `
+          -ExpectedHeadSha ([string]$pending.expectedHeadSha) `
+          -WaitMinutes 5
       }
+      if ($null -eq $located) {
+        throw 'correlated_workflow_not_found'
+      }
+      Write-RotationState (New-StateForStage $state ([ordered]@{
+        stage = 'workflow_dispatched'
+        requestId = [string]$pending.requestId
+        candidatePath = [string]$pending.candidatePath
+        tokenSha256 = [string]$pending.tokenSha256
+        issuedAt = [string]$pending.issuedAt
+        expiresAt = [string]$pending.expiresAt
+        expectedHeadSha = [string]$pending.expectedHeadSha
+        workflowRunId = [long]$located.workflowRunId
+      }))
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId ([string]$pending.requestId) `
+        -Stage 'workflow_dispatched' `
+        -WorkflowRunId ([long]$located.workflowRunId)
       $state = Get-RotationState
       continue
     }
 
     if ($pending.stage -eq 'workflow_dispatched') {
+      if ($recovery.action -ne 'complete_correlated_workflow') {
+        throw 'unexpected_workflow_recovery_action'
+      }
       try {
-        $workflowRunId = Wait-CorrelatedWorkflow `
+        $workflowRunId = Complete-CorrelatedWorkflow `
           -RequestId ([string]$pending.requestId) `
-          -ExpectedHeadSha ([string]$pending.expectedHeadSha)
+          -ExpectedHeadSha ([string]$pending.expectedHeadSha) `
+          -WorkflowRunId ([long]$pending.workflowRunId)
       }
       catch {
         if ($_.Exception.Message -ne 'correlated_workflow_failed') {
@@ -462,6 +669,11 @@ try {
         Write-RotationState (New-StateForStage $state $null)
         Start-Runner
         Wait-RunnerReady
+        Write-SupportAutopilotRedactedEvent `
+          -EventPath $EventPath `
+          -EventCode 'credential_rotation_recovered' `
+          -RequestId ([string]$pending.requestId) `
+          -Outcome 'remote_failed_local_active'
         [pscustomobject]@{
           outcome = 'remote_failed_local_recovered'
           rotated = $false
@@ -478,12 +690,18 @@ try {
         expectedHeadSha = [string]$pending.expectedHeadSha
         workflowRunId = $workflowRunId
       }))
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId ([string]$pending.requestId) `
+        -Stage 'server_accepted' `
+        -WorkflowRunId ([long]$workflowRunId)
       $state = Get-RotationState
       continue
     }
 
     if ($pending.stage -eq 'server_accepted') {
-      if (Test-Path -LiteralPath $pending.candidatePath -PathType Leaf) {
+      if ($recovery.action -eq 'promote_candidate') {
         Assert-CandidateDigest `
           -CandidatePath ([string]$pending.candidatePath) `
           -Digest ([string]$pending.tokenSha256)
@@ -501,10 +719,31 @@ try {
           Move-Item -LiteralPath $pending.candidatePath -Destination $ActiveCredentialPath
         }
       }
-      else {
+      elseif ($recovery.action -eq 'rotate_fresh_candidate') {
+          $replacementRequestId = [Guid]::NewGuid().ToString('D').ToLowerInvariant()
+          Write-RotationState (New-StateForStage $state ([ordered]@{
+            stage = 'runner_stopped'
+            requestId = $replacementRequestId
+          }))
+          Write-SupportAutopilotRedactedEvent `
+            -EventPath $EventPath `
+            -EventCode 'candidate_recovery_started' `
+            -RequestId $replacementRequestId `
+            -Outcome 'missing_after_server_acceptance'
+          $state = Get-RotationState
+          continue
+      }
+      elseif ($recovery.action -eq 'finalize_existing_promotion') {
         Assert-CandidateDigest `
           -CandidatePath $ActiveCredentialPath `
           -Digest ([string]$pending.tokenSha256)
+      }
+      else {
+        throw 'unexpected_server_accepted_recovery_action'
+      }
+      Set-SupportAutopilotCurrentUserAcl -Path $ActiveCredentialPath
+      if (Test-Path -LiteralPath $RollbackCredentialPath -PathType Leaf) {
+        Set-SupportAutopilotCurrentUserAcl -Path $RollbackCredentialPath
       }
       Write-RotationState (New-StateForStage $state ([ordered]@{
         stage = 'candidate_promoted'
@@ -516,11 +755,20 @@ try {
         expectedHeadSha = [string]$pending.expectedHeadSha
         workflowRunId = [long]$pending.workflowRunId
       }))
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_stage' `
+        -RequestId ([string]$pending.requestId) `
+        -Stage 'candidate_promoted' `
+        -WorkflowRunId ([long]$pending.workflowRunId)
       $state = Get-RotationState
       continue
     }
 
     if ($pending.stage -eq 'candidate_promoted') {
+      if ($recovery.action -ne 'verify_and_start') {
+        throw 'unexpected_candidate_promoted_recovery_action'
+      }
       Assert-CandidateDigest `
         -CandidatePath $ActiveCredentialPath `
         -Digest ([string]$pending.tokenSha256)
@@ -536,6 +784,12 @@ try {
         updatedAt = ConvertTo-CanonicalUtc
       }
       Write-RotationState $finalState
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'credential_rotation_completed' `
+        -RequestId ([string]$pending.requestId) `
+        -Outcome 'rotated' `
+        -WorkflowRunId ([long]$pending.workflowRunId)
       [pscustomobject]@{
         outcome = 'rotated'
         rotated = $true

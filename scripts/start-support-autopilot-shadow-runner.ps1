@@ -16,6 +16,8 @@ if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
+$SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
+. $SecurityScript
 $EntryPoint = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-shadow-main.js'
 $StateRoot = Join-Path $InstallRoot 'state'
 $StatePath = Join-Path $StateRoot 'credential-rotation.json'
@@ -24,6 +26,21 @@ $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $SupervisorMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-credential-supervisor-main.js'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
 $StderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
+$EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
+
+trap {
+  try {
+    if (Test-Path -LiteralPath $StateRoot -PathType Container) {
+      Write-SupportAutopilotRedactedEvent `
+        -EventPath $EventPath `
+        -EventCode 'runner_start_failed' `
+        -Outcome 'fixed_failure'
+    }
+  }
+  catch {}
+  [Console]::Error.WriteLine('SUPPORT_AUTOPILOT_RUNNER_START_FAILED')
+  exit 1
+}
 
 function Get-SupportAutopilotRunnerProcess {
   $pattern = '^\s*"?' + [regex]::Escape($NodeExecutable) + '"?\s+"?' +
@@ -52,6 +69,7 @@ if ($PlanOnly) {
 if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {
   New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
 }
+Set-SupportAutopilotCurrentUserAcl -Path $StateRoot -Container
 $lockStream = $null
 if (-not $SupervisorOwnedLock) {
   try {
@@ -71,11 +89,22 @@ if (-not $SupervisorOwnedLock) {
 
 try {
 $existing = @(Get-SupportAutopilotRunnerProcess)
+try {
+  Assert-NoSupportAutopilotPlaintextTokenEnvironment
+}
+catch {
+  Write-SupportAutopilotRedactedEvent `
+    -EventPath $EventPath `
+    -EventCode 'runner_start_blocked' `
+    -Outcome 'plaintext_environment'
+  throw 'plaintext_token_environment_present'
+}
 if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
   [pscustomobject]@{ reason = 'credential_state_missing'; started = $false } |
     ConvertTo-Json -Compress
   exit 0
 }
+Set-SupportAutopilotCurrentUserAcl -Path $StatePath
 foreach ($requiredPath in @($NodeExecutable, $EntryPoint, $SupervisorMain)) {
   if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
     throw "required runner file is missing"
@@ -115,6 +144,7 @@ if ($existing.Count -gt 0) {
 }
 
 $AttestationPath = Join-Path $StateRoot 'privacy-attestation.json'
+Set-SupportAutopilotCurrentUserAcl -Path $AttestationPath
 $attestation = Get-Content -LiteralPath $AttestationPath -Raw -Encoding UTF8 |
   ConvertFrom-Json
 if (
@@ -123,9 +153,6 @@ if (
 ) {
   throw 'privacy attestation metadata is invalid'
 }
-
-Remove-Item Env:SUPPORT_AUTOPILOT_SERVICE_TOKEN -ErrorAction SilentlyContinue
-Remove-Item Env:ADMIN_API_TOKEN -ErrorAction SilentlyContinue
 
 $env:SUPPORT_AUTOPILOT_SHADOW_RUNNER_ENABLED = 'true'
 $env:SUPPORT_AUTOPILOT_CODEX_EXECUTABLE = Join-Path $InstallRoot 'standalone-codex\node_modules\@openai\codex\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe'
@@ -145,6 +172,8 @@ $env:ADMIN_API_BASE_URL = 'https://malikbot.ru/new-admin'
 
 [IO.File]::WriteAllText($StdoutPath, '', [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($StderrPath, '', [Text.UTF8Encoding]::new($false))
+Set-SupportAutopilotCurrentUserAcl -Path $StdoutPath
+Set-SupportAutopilotCurrentUserAcl -Path $StderrPath
 
 $process = Start-Process `
   -FilePath $NodeExecutable `
@@ -159,6 +188,10 @@ $process = Start-Process `
   processId = $process.Id
   started = $true
 } | ConvertTo-Json -Compress
+Write-SupportAutopilotRedactedEvent `
+  -EventPath $EventPath `
+  -EventCode 'runner_started' `
+  -Outcome 'started'
 }
 finally {
   if ($null -ne $lockStream) {

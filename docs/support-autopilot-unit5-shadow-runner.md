@@ -110,8 +110,10 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
 
 The rotation journal is non-secret and contains only stages, UUIDs, hashes,
 timestamps, a candidate path, the expected Git revision, and a workflow run id.
-The stages are `runner_stopped`, `candidate_ready`, `workflow_dispatched`,
-`server_accepted`, and `candidate_promoted`. Every read is schema-validated.
+The stages are `runner_stopped`, `candidate_ready`, `dispatch_prepared`,
+`workflow_dispatched`, `server_accepted`, and `candidate_promoted`. Every read
+is schema-validated. `dispatch_prepared` allows recovery to look for the exact
+UUID/SHA run before deciding whether a dispatch still needs to be sent.
 The candidate path is bound to the exact request UUID under the credential
 directory. The generated token is decrypted only in memory to compare its
 SHA-256 digest before atomic promotion.
@@ -129,12 +131,17 @@ must contain only the reviewed script path and install root. The definitions
 must contain `InteractiveToken`, `LeastPrivilege`, `IgnoreNew`, and
 `StartWhenAvailable`, with five-minute and hourly repetition respectively.
 
-The supervisor checks the credential-backed queue health before stopping the
-runner and defers while `activeLeases` is nonzero. It dispatches only
+The supervisor requires all queue, privacy, attestation, and runner gates before
+starting a rotation. It checks `activeLeases` before stopping the runner and
+again after the process is stopped, when no new lease can be acquired. It
+defers or waits for lease drain instead of rotating through active work. It dispatches only
 `support-autopilot-credential-rotation.yml` in
 `afed9260/ai-agent-backend`, correlates the exact request UUID and `main` SHA,
 waits for success, then atomically replaces the DPAPI blob while retaining one
-encrypted rollback blob. A confirmed failed workflow is recovered only when
+encrypted rollback blob. An orphan candidate created before its journal update
+is deleted and regenerated. A missing candidate after server acceptance causes
+a fresh candidate and a second guarded rotation; it is never replaced by a
+one-off local send. A confirmed failed workflow is recovered only when
 the old credential still passes the dedicated health boundary. Ambiguous state
 fails closed and remains in the journal for the next audited recovery attempt.
 
@@ -150,6 +157,14 @@ on, online, and logged into the same Windows account. A locked session is
 acceptable, but a signed-out session cannot run `InteractiveToken` tasks. The
 dedicated ChatGPT-authenticated Codex profile and privacy attestation must also
 remain valid; their renewal is not handled by the service-credential rotation.
+
+The state directory, state files, event journal, and runner logs use protected
+current-user-only ACLs. `credential-rotation.events.jsonl` contains only stable
+event codes, timestamps, stages, UUIDs, counters, outcomes, and workflow run
+ids. Raw errors, command output, tokens, ticket content, and provider responses
+are forbidden. If `SUPPORT_AUTOPILOT_SERVICE_TOKEN` or `ADMIN_API_TOKEN` is
+present in the environment, startup and rotation fail closed and record only a
+redacted blocker; the variables are never silently removed.
 
 ## Local Readiness Doctor
 

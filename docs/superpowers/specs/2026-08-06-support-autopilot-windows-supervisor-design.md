@@ -52,12 +52,14 @@ stage. It never stores the token.
 3. Query the dedicated support-automation health boundary using the current
    DPAPI credential. Continue only when `activeLeases=0` and the runner gates are
    ready.
-4. Stop the runner and verify that no reviewed runner process remains. This
-   prevents a new lease from starting during rotation.
+4. Stop the runner, verify that no reviewed runner process remains, and query
+   health again until `activeLeases=0`. This closes the lease race between the
+   first health read and process shutdown.
 5. Generate a non-overwriting DPAPI candidate with the existing cryptographic
    generator. Persist only its digest and bounded issue/expiry timestamps.
-6. Dispatch the guarded production workflow with the digest, timestamps, and a
-   random request id. The workflow run name includes that request id. The local
+6. Persist `dispatch_prepared`, search for an already-created exact run after
+   recovery, then dispatch the guarded production workflow with the digest,
+   timestamps, and a random request id only when needed. The workflow run name includes that request id. The local
    supervisor accepts exactly one completed successful run from `main` at the
    expected commit SHA.
 7. Atomically move the current canonical DPAPI blob to an encrypted backup and

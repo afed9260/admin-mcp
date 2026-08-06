@@ -1,11 +1,14 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   credentialTokenMatchesDigest,
+  type CredentialRotationRecoveryAction,
   locateCredentialRotationRun,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
+  planCredentialRotationRecovery,
   selectCredentialRotationRun,
   shouldRotateCredential,
 } from "./support-autopilot-credential-supervisor.js";
@@ -14,11 +17,14 @@ import { WindowsDpapiSecretProvider } from "./windows-dpapi-secret-provider.js";
 type JsonReader = (filePath: string) => Promise<unknown>;
 
 export interface CredentialSupervisorCommandDependencies {
+  pathExists?: (filePath: string) => boolean;
   readJsonFile?: JsonReader;
   secretProvider?: Pick<WindowsDpapiSecretProvider, "read">;
 }
 
 export type CredentialSupervisorCommandResult =
+  | { action: CredentialRotationRecoveryAction }
+  | { found: false }
   | { matches: true }
   | { status: string; workflowRunId: number }
   | { pendingRotation: boolean; rotate: boolean; seedRequired?: true }
@@ -72,6 +78,39 @@ export async function runCredentialSupervisorCommand(
       return { valid: true };
     }
 
+    if (command === "recovery-action") {
+      assertOnlyOptions(options, ["active-path", "credential-root", "state"]);
+      const credentialRoot = windowsAbsolutePath(requiredOption(options, "credential-root"));
+      const activePath = windowsAbsolutePath(requiredOption(options, "active-path"));
+      const state = parseCredentialRotationState(
+        await readJsonFile(requiredOption(options, "state")),
+        credentialRoot,
+      );
+      if (state.pendingRotation === null) {
+        throw new Error("pending rotation is required");
+      }
+      const pending = state.pendingRotation;
+      const candidatePath = pending.stage === "runner_stopped"
+        ? path.win32.join(credentialRoot, `candidate-${pending.requestId}.dpapi`)
+        : pending.candidatePath;
+      const candidateExists = (dependencies.pathExists ?? existsSync)(candidatePath);
+      let activeMatchesCandidate: boolean | undefined;
+      if (pending.stage === "server_accepted" && !candidateExists) {
+        const secretProvider = dependencies.secretProvider ?? new WindowsDpapiSecretProvider();
+        const activeToken = await secretProvider.read(activePath);
+        activeMatchesCandidate = credentialTokenMatchesDigest(
+          activeToken,
+          pending.tokenSha256,
+        );
+      }
+      return {
+        action: planCredentialRotationRecovery(pending, {
+          activeMatchesCandidate,
+          candidateExists,
+        }),
+      };
+    }
+
     if (command === "verify-candidate") {
       assertOnlyOptions(options, ["candidate-path", "digest"]);
       const candidatePath = windowsAbsolutePath(requiredOption(options, "candidate-path"));
@@ -84,19 +123,31 @@ export async function runCredentialSupervisorCommand(
       return { matches: true };
     }
 
-    if (command === "locate-run" || command === "select-run") {
+    if (command === "locate-run" || command === "probe-run" || command === "select-run") {
       assertOnlyOptions(options, ["expected-sha", "inventory", "request-id"]);
-      const select = command === "locate-run"
+      const select = command === "locate-run" || command === "probe-run"
         ? locateCredentialRotationRun
         : selectCredentialRotationRun;
-      const run = select(
-        await readJsonFile(requiredOption(options, "inventory")),
-        {
-          expectedHeadSha: requiredOption(options, "expected-sha"),
-          requestId: requiredOption(options, "request-id"),
-        },
-      );
-      return command === "locate-run"
+      let run;
+      try {
+        run = select(
+          await readJsonFile(requiredOption(options, "inventory")),
+          {
+            expectedHeadSha: requiredOption(options, "expected-sha"),
+            requestId: requiredOption(options, "request-id"),
+          },
+        );
+      } catch (error) {
+        if (
+          command === "probe-run"
+          && error instanceof Error
+          && error.message === "credential rotation run not found"
+        ) {
+          return { found: false };
+        }
+        throw error;
+      }
+      return command === "locate-run" || command === "probe-run"
         ? { status: run.status, workflowRunId: run.databaseId }
         : { workflowRunId: run.databaseId };
     }

@@ -5,6 +5,7 @@ import {
   locateCredentialRotationRun,
   parseCredentialRotationState,
   parseGeneratedCredentialMetadata,
+  planCredentialRotationRecovery,
   selectCredentialRotationRun,
   shouldRotateCredential,
 } from "../src/runner/support-autopilot-credential-supervisor.js";
@@ -76,9 +77,8 @@ describe("support autopilot credential supervisor policy", () => {
         ...base,
         pendingRotation: {
           ...candidate,
-          stage: "workflow_dispatched",
+          stage: "dispatch_prepared",
           expectedHeadSha: HEAD_SHA,
-          workflowRunId: null,
         },
       },
       {
@@ -137,6 +137,48 @@ describe("support autopilot credential supervisor policy", () => {
 
     expect(credentialTokenMatchesDigest(token, digest)).toBe(true);
     expect(credentialTokenMatchesDigest(`${token}-wrong`, digest)).toBe(false);
+  });
+
+  it("plans every interruption recovery without guessing", () => {
+    const candidate = {
+      candidatePath: CANDIDATE_PATH,
+      expiresAt: EXPIRES_AT,
+      issuedAt: ISSUED_AT,
+      requestId: REQUEST_ID,
+      tokenSha256: "c".repeat(64),
+    };
+
+    expect(planCredentialRotationRecovery({
+      requestId: REQUEST_ID,
+      stage: "runner_stopped",
+    }, { candidateExists: true })).toBe("remove_orphan_candidate");
+    expect(planCredentialRotationRecovery({
+      requestId: REQUEST_ID,
+      stage: "runner_stopped",
+    }, { candidateExists: false })).toBe("generate_candidate");
+    expect(planCredentialRotationRecovery({
+      ...candidate,
+      stage: "candidate_ready",
+    }, { candidateExists: false })).toBe("restart_with_fresh_candidate");
+    expect(planCredentialRotationRecovery({
+      ...candidate,
+      expectedHeadSha: HEAD_SHA,
+      stage: "dispatch_prepared",
+    }, { candidateExists: true })).toBe("inspect_correlated_workflow");
+    expect(planCredentialRotationRecovery({
+      ...candidate,
+      expectedHeadSha: HEAD_SHA,
+      stage: "server_accepted",
+      workflowRunId: 42,
+    }, { candidateExists: false, activeMatchesCandidate: false }))
+      .toBe("rotate_fresh_candidate");
+    expect(planCredentialRotationRecovery({
+      ...candidate,
+      expectedHeadSha: HEAD_SHA,
+      stage: "server_accepted",
+      workflowRunId: 42,
+    }, { candidateExists: false, activeMatchesCandidate: true }))
+      .toBe("finalize_existing_promotion");
   });
 
   it("selects exactly one successful workflow run at the expected main SHA", () => {

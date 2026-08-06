@@ -95,7 +95,7 @@ $definitions = @(
     interval = 'PT1H'
     name = $SupervisorTaskName
     script = $SupervisorScript
-    timeLimit = 'PT30M'
+    timeLimit = 'PT50M'
   }
 )
 

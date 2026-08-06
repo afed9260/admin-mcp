@@ -35,8 +35,14 @@ const healthSchema = z.object({
 
 export interface SupportAutopilotLocalHealth {
   activeLeases: number;
+  claimsEnabled: boolean;
+  gatesReady: boolean;
+  jobCreationEnabled: boolean;
   pendingJobs: number;
+  privacyGatePassed: boolean;
   reachable: true;
+  runnerReady: boolean;
+  shadowModeEnabled: boolean;
 }
 
 export interface SupportAutopilotLocalHealthDependencies {
@@ -62,11 +68,23 @@ export async function runSupportAutopilotLocalHealth(
     const health = healthSchema.parse(
       await client.get<unknown>("/support-automation/health"),
     );
+    const gatesReady = health.claimsEnabled
+      && health.jobCreationEnabled
+      && health.privacyGatePassed
+      && health.runnerReady
+      && health.shadowModeEnabled
+      && health.privacyAttestationId === config.privacyAttestationId;
 
     return {
       activeLeases: health.activeLeases,
+      claimsEnabled: health.claimsEnabled,
+      gatesReady,
+      jobCreationEnabled: health.jobCreationEnabled,
       pendingJobs: health.pendingJobs,
+      privacyGatePassed: health.privacyGatePassed,
       reachable: true,
+      runnerReady: health.runnerReady,
+      shadowModeEnabled: health.shadowModeEnabled,
     };
   } catch {
     throw new Error("SUPPORT_AUTOPILOT_LOCAL_HEALTH_FAILED");

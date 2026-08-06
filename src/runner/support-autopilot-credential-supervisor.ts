@@ -62,9 +62,14 @@ const pendingRotationSchema = z.union([
   }).strict(),
   z.object({
     ...pendingRotationCandidateFields,
+    stage: z.literal("dispatch_prepared"),
+    expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
+  }).strict(),
+  z.object({
+    ...pendingRotationCandidateFields,
     stage: z.literal("workflow_dispatched"),
     expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
-    workflowRunId: z.number().int().positive().safe().nullable(),
+    workflowRunId: z.number().int().positive().safe(),
   }).strict(),
   z.object({
     ...pendingRotationCandidateFields,
@@ -103,6 +108,18 @@ const credentialRotationRunSchema = z.object({
 
 export type GeneratedCredentialMetadata = z.infer<typeof generatedCredentialMetadataSchema>;
 export type CredentialRotationState = z.infer<typeof credentialRotationStateSchema>;
+export type PendingCredentialRotation = NonNullable<CredentialRotationState["pendingRotation"]>;
+export type CredentialRotationRecoveryAction =
+  | "complete_correlated_workflow"
+  | "finalize_existing_promotion"
+  | "generate_candidate"
+  | "inspect_correlated_workflow"
+  | "prepare_dispatch"
+  | "promote_candidate"
+  | "remove_orphan_candidate"
+  | "restart_with_fresh_candidate"
+  | "rotate_fresh_candidate"
+  | "verify_and_start";
 
 export type CredentialRotationRun = z.infer<typeof credentialRotationRunSchema>;
 
@@ -166,6 +183,39 @@ export function credentialTokenMatchesDigest(token: string, expectedDigest: stri
   const actual = createHash("sha256").update(token, "utf8").digest();
   const expected = Buffer.from(expectedDigest, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function planCredentialRotationRecovery(
+  pending: PendingCredentialRotation,
+  facts: { candidateExists: boolean; activeMatchesCandidate?: boolean },
+): CredentialRotationRecoveryAction {
+  if (pending.stage === "runner_stopped") {
+    return facts.candidateExists ? "remove_orphan_candidate" : "generate_candidate";
+  }
+  if (pending.stage === "candidate_ready") {
+    return facts.candidateExists ? "prepare_dispatch" : "restart_with_fresh_candidate";
+  }
+  if (pending.stage === "dispatch_prepared") {
+    return facts.candidateExists
+      ? "inspect_correlated_workflow"
+      : "restart_with_fresh_candidate";
+  }
+  if (pending.stage === "workflow_dispatched") {
+    return "complete_correlated_workflow";
+  }
+  if (pending.stage === "server_accepted") {
+    if (facts.candidateExists) {
+      return "promote_candidate";
+    }
+    if (facts.activeMatchesCandidate === true) {
+      return "finalize_existing_promotion";
+    }
+    if (facts.activeMatchesCandidate === false) {
+      return "rotate_fresh_candidate";
+    }
+    throw new Error("active credential match fact is required");
+  }
+  return "verify_and_start";
 }
 
 export function credentialRotationRunTitle(requestId: string): string {

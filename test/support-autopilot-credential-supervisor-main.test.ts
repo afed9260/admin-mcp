@@ -53,6 +53,46 @@ describe("credential supervisor command boundary", () => {
     })).resolves.toEqual({ valid: true });
   });
 
+  it("returns a tested recovery action for interrupted local stages", async () => {
+    const runnerStoppedState = {
+      ...activeState,
+      pendingRotation: { requestId: REQUEST_ID, stage: "runner_stopped" },
+    };
+    await expect(runCredentialSupervisorCommand([
+      "recovery-action",
+      "--state", "C:\\support-autopilot\\state\\rotation.json",
+      "--credential-root", ROOT,
+      "--active-path", `${ROOT}\\support-autopilot.dpapi`,
+    ], {
+      pathExists: vi.fn().mockReturnValue(true),
+      readJsonFile: vi.fn().mockResolvedValue(runnerStoppedState),
+    })).resolves.toEqual({ action: "remove_orphan_candidate" });
+
+    const serverAcceptedState = {
+      ...activeState,
+      pendingRotation: {
+        candidatePath: `${ROOT}\\candidate-${REQUEST_ID}.dpapi`,
+        expiresAt: "2026-08-07T08:00:00.000Z",
+        expectedHeadSha: HEAD_SHA,
+        issuedAt: "2026-08-06T09:00:00.000Z",
+        requestId: REQUEST_ID,
+        stage: "server_accepted",
+        tokenSha256: "ca279688ba128c434863a6f4c5537dd5ee39c79fe6f882066e3d939e98c22717",
+        workflowRunId: 42,
+      },
+    };
+    await expect(runCredentialSupervisorCommand([
+      "recovery-action",
+      "--state", "C:\\support-autopilot\\state\\rotation.json",
+      "--credential-root", ROOT,
+      "--active-path", `${ROOT}\\support-autopilot.dpapi`,
+    ], {
+      pathExists: vi.fn().mockReturnValue(false),
+      readJsonFile: vi.fn().mockResolvedValue(serverAcceptedState),
+      secretProvider: { read: vi.fn().mockResolvedValue("old-token") },
+    })).resolves.toEqual({ action: "rotate_fresh_candidate" });
+  });
+
   it("verifies a decrypted candidate only by digest", async () => {
     const digest = "ca279688ba128c434863a6f4c5537dd5ee39c79fe6f882066e3d939e98c22717";
     const read = vi.fn().mockResolvedValue("candidate-token-value");
@@ -105,6 +145,31 @@ describe("credential supervisor command boundary", () => {
       status: "queued",
       workflowRunId: 42,
     });
+  });
+
+  it("distinguishes an absent run from an ambiguous inventory", async () => {
+    const args = [
+      "probe-run",
+      "--inventory", "C:\\support-autopilot\\state\\runs.json",
+      "--request-id", REQUEST_ID,
+      "--expected-sha", HEAD_SHA,
+    ];
+    await expect(runCredentialSupervisorCommand(args, {
+      readJsonFile: vi.fn().mockResolvedValue([]),
+    })).resolves.toEqual({ found: false });
+
+    const run = {
+      conclusion: null,
+      databaseId: 42,
+      displayTitle: `Support Autopilot Credential Rotation action=enable request_id=${REQUEST_ID}`,
+      event: "workflow_dispatch",
+      headBranch: "main",
+      headSha: HEAD_SHA,
+      status: "queued",
+    };
+    await expect(runCredentialSupervisorCommand(args, {
+      readJsonFile: vi.fn().mockResolvedValue([run, { ...run, databaseId: 43 }]),
+    })).rejects.toThrow("SUPPORT_AUTOPILOT_CREDENTIAL_SUPERVISOR_FAILED");
   });
 
   it("collapses all failures and never includes raw values", async () => {
