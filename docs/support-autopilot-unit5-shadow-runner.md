@@ -1,6 +1,6 @@
 # Support Autopilot Unit 5 Shadow Runner
 
-The runner is dormant code. It has no autostart, Windows service, scheduled task, or production configuration. It records internal shadow decisions only and cannot deliver them to customers.
+The runner records internal shadow decisions and cannot deliver them to customers. It can run in the foreground or through the guarded current-user Windows supervisor described below. Installing scheduled tasks is an explicit production operation; building the repository alone does not enable autostart.
 
 ## Prerequisites
 
@@ -78,6 +78,78 @@ SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH = "C:\\support-autopilot\\credentials\\su
 The production preflight requires these exact two keys and exact configured values. The local doctor requires the exact credential path and a credential-free HTTPS URL. Any token, extra key, `env_vars` entry, URL credential/query/hash, or path mismatch fails closed. The synthetic profile remains environment-free.
 
 Build with `npm run build`. `npm run support-autopilot:shadow` starts the foreground process only when the exact enable value is `true`.
+
+## Current-User Windows Supervisor
+
+Single-user desktop mode uses two scheduled tasks under the current Windows
+identity. Both use `InteractiveToken` and `LeastPrivilege`; neither stores a
+Windows password.
+
+- `Sdelka Support Autopilot Watchdog` runs at logon and every five minutes. It
+  starts exactly one reviewed runner process and refuses to start while a
+  credential rotation is pending.
+- `Sdelka Support Autopilot Credential Supervisor` runs at logon and hourly. It
+  rotates only the dedicated support-autopilot service credential when fewer
+  than six hours remain. It never reads or changes customer authentication,
+  provider credentials, money, ticket state, or customer settings.
+
+Build the reviewed checkout and inspect the no-mutation plans first:
+
+```powershell
+corepack pnpm verify
+
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  scripts/start-support-autopilot-shadow-runner.ps1 -PlanOnly
+
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  scripts/invoke-support-autopilot-credential-supervisor.ps1 -PlanOnly
+
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  scripts/install-support-autopilot-scheduled-tasks.ps1 -PlanOnly
+```
+
+The rotation journal is non-secret and contains only stages, UUIDs, hashes,
+timestamps, a candidate path, the expected Git revision, and a workflow run id.
+The stages are `runner_stopped`, `candidate_ready`, `workflow_dispatched`,
+`server_accepted`, and `candidate_promoted`. Every read is schema-validated.
+The candidate path is bound to the exact request UUID under the credential
+directory. The generated token is decrypted only in memory to compare its
+SHA-256 digest before atomic promotion.
+
+Install the tasks only after the initial journal contains the active
+credential's hash-free issue and expiry timestamps:
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  scripts/install-support-autopilot-scheduled-tasks.ps1
+```
+
+Export and inspect both task definitions after installation. Their arguments
+must contain only the reviewed script path and install root. The definitions
+must contain `InteractiveToken`, `LeastPrivilege`, `IgnoreNew`, and
+`StartWhenAvailable`, with five-minute and hourly repetition respectively.
+
+The supervisor checks the credential-backed queue health before stopping the
+runner and defers while `activeLeases` is nonzero. It dispatches only
+`support-autopilot-credential-rotation.yml` in
+`afed9260/ai-agent-backend`, correlates the exact request UUID and `main` SHA,
+waits for success, then atomically replaces the DPAPI blob while retaining one
+encrypted rollback blob. A confirmed failed workflow is recovered only when
+the old credential still passes the dedicated health boundary. Ambiguous state
+fails closed and remains in the journal for the next audited recovery attempt.
+
+To remove only these two tasks without touching credentials or runner state:
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  scripts/uninstall-support-autopilot-scheduled-tasks.ps1
+```
+
+This mode is not an unattended Windows service. The computer must be powered
+on, online, and logged into the same Windows account. A locked session is
+acceptable, but a signed-out session cannot run `InteractiveToken` tasks. The
+dedicated ChatGPT-authenticated Codex profile and privacy attestation must also
+remain valid; their renewal is not handled by the service-credential rotation.
 
 ## Local Readiness Doctor
 
