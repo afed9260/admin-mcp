@@ -347,6 +347,18 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).not.toContain("--ref main");
   });
 
+  it("uses authenticated health instead of a locked stderr file for readiness", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const waitReady = source.slice(
+      source.indexOf("function Wait-RunnerReady"),
+      source.indexOf("function Get-WorkflowSha"),
+    );
+
+    expect(waitReady).not.toContain("[IO.File]::ReadAllText");
+    expect(waitReady).toContain("Get-QueueHealth");
+    expect(waitReady).toContain("Assert-QueueGatesReady");
+  });
+
   it("preserves recovery evidence until the old credential is confirmed healthy", () => {
     const source = script("invoke-support-autopilot-credential-supervisor.ps1");
     const failedWorkflow = source.slice(source.indexOf("if ($_.Exception.Message -ne 'correlated_workflow_failed')"));

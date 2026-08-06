@@ -262,25 +262,26 @@ function Wait-PostStopLeaseDrain {
 }
 
 function Wait-RunnerReady {
-  $readyEvent = '"eventCode":"shadow_runner_ready"'
-  $stderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
   $deadline = [DateTimeOffset]::UtcNow.AddMinutes(2)
   do {
     Start-Sleep -Seconds 2
     $running = @(Get-ExactRunnerProcess)
-    $readyLogged = $false
-    if (Test-Path -LiteralPath $stderrPath -PathType Leaf) {
+    if ($running.Count -eq 1) {
       try {
-        $readyLogged = [IO.File]::ReadAllText($stderrPath).Contains($readyEvent)
+        $health = Get-QueueHealth
+        Assert-QueueGatesReady $health
+        return
       }
-      catch [IO.IOException] {
-        $readyLogged = $false
+      catch {
+        if (
+          $_.Exception.Message -notin @(
+            'support_autopilot_health_failed',
+            'support_autopilot_gates_not_ready'
+          )
+        ) {
+          throw
+        }
       }
-    }
-    if ($running.Count -eq 1 -and $readyLogged) {
-      $health = Get-QueueHealth
-      Assert-QueueGatesReady $health
-      return
     }
   } while ([DateTimeOffset]::UtcNow -lt $deadline)
   throw 'runner_readiness_timeout'

@@ -65,9 +65,11 @@ stage. It never stores the token.
 7. Atomically move the current canonical DPAPI blob to an encrypted backup and
    promote the candidate. If the promotion fails, retain the journal and retry
    recovery; never print either blob.
-8. Start the runner and require a fresh `shadow_runner_ready` event plus a
-   successful dedicated health check. Only then mark the new credential active
-   and remove stale encrypted backups beyond the retained rollback copy.
+8. Start the runner and require the authenticated dedicated health response to
+   report both `runnerReady=true` and a fresh runner heartbeat. Only then mark
+   the new credential active and remove stale encrypted backups beyond the
+   retained rollback copy. The supervisor never reads the live redirected
+   stderr file as a readiness boundary.
 
 If GitHub rejects or fails the rotation, the canonical blob remains unchanged
 and the old runner is restarted. If the server accepted the candidate but the
