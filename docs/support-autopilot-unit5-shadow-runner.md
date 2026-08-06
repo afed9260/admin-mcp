@@ -99,7 +99,10 @@ The start script delegates only process creation to a bounded Node launcher.
 That launcher inherits the already-prepared non-secret runtime environment,
 binds all three standard streams to current-user-only files, detaches the exact
 runner process, returns its PID, and exits. The supervisor does not synchronously
-wait on a PowerShell process that owns the long-lived runner.
+wait on a PowerShell process that owns the long-lived runner. It retains the
+rotation lock until the transient PowerShell helper exits, validates its exit
+code and returned PID, and terminates that exact helper before releasing the
+lock on timeout.
 
 Build the reviewed checkout and inspect the no-mutation plans first:
 

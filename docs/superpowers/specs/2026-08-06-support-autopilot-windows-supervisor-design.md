@@ -68,7 +68,10 @@ stage. It never stores the token.
 8. Record the current heartbeat and launch the runner through the bounded Node
    process launcher. The launcher detaches the runner with stdin, stdout, and
    stderr bound only to protected files, then exits. The supervisor observes
-   the exact new PID directly and requires the authenticated dedicated health
+   the exact new PID directly, waits for the transient PowerShell helper to
+   exit, and verifies its exit code and returned PID before releasing the
+   rotation lock. A timed-out helper is terminated by exact PID and awaited so
+   it cannot launch later. The supervisor then requires the authenticated dedicated health
    response to report `runnerReady=true` plus a heartbeat newer than the
    pre-start baseline. Only then mark the new credential active and remove
    stale encrypted backups beyond the retained rollback copy. The supervisor

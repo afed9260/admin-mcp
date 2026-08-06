@@ -285,11 +285,21 @@ describe("Windows support autopilot lifecycle scripts", () => {
       const finalHeartbeat = existsSync(fakeHeartbeatPath)
         ? readFileSync(fakeHeartbeatPath, "utf8").trim()
         : "missing";
+      const runnerStartStdoutPath = path.join(stateRoot, "runner-start.stdout.log");
+      const runnerStartStderrPath = path.join(stateRoot, "runner-start.stderr.log");
+      const runnerStartStdout = existsSync(runnerStartStdoutPath)
+        ? readFileSync(runnerStartStdoutPath, "utf8")
+        : "missing";
+      const runnerStartStderr = existsSync(runnerStartStderrPath)
+        ? readFileSync(runnerStartStderrPath, "utf8")
+        : "missing";
       expect(
         result.status,
         `${result.stderr}\nstdout=${result.stdout}\nevents=${redactedEvents}\n` +
           `journal=${journal}\ninitialHeartbeat=${initialHeartbeat}\n` +
-          `finalHeartbeat=${finalHeartbeat}\nfakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
+          `finalHeartbeat=${finalHeartbeat}\nrunnerStartStdout=${runnerStartStdout}\n` +
+          `runnerStartStderr=${runnerStartStderr}\n` +
+          `fakeGhStateExists=${existsSync(fakeGitHubStatePath)}`,
       ).toBe(0);
       expect(JSON.parse(result.stdout.trim())).toMatchObject({
         outcome: "rotated",
@@ -380,6 +390,72 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(waitReady).toContain("heartbeatBaseline");
     expect(waitReady).toContain("runnerLastSeenAt");
   });
+
+  it("contains the transient start helper before releasing the rotation lock", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const startRunnerIndex = source.indexOf("function Start-Runner");
+    const startRunner = source.slice(
+      startRunnerIndex,
+      source.indexOf("\nfunction Stop-Runner", startRunnerIndex),
+    );
+
+    expect(startRunner).toContain("Wait-SupportAutopilotProcessExit");
+    expect(startRunner).toContain("Stop-SupportAutopilotProcess");
+    expect(startRunner).toContain("runner_start_helper_timeout");
+    expect(startRunner).toContain("runner_start_helper_pid_mismatch");
+    const helperSource = script("support-autopilot-windows-process-helper.ps1");
+    expect(helperSource).toContain("Stop-Process -Id $Process.Id");
+  });
+
+  windowsIt("kills a timed-out start helper before it can act later", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "support-autopilot-helper-test-"));
+    const delayedScript = path.join(root, "delayed-action.ps1");
+    const harnessScript = path.join(root, "harness.ps1");
+    const markerPath = path.join(root, "late-action.txt");
+    const helperScript = path.resolve("scripts", "support-autopilot-windows-process-helper.ps1");
+    const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    writeFileSync(delayedScript, [
+      "param([Parameter(Mandatory = $true)][string]$MarkerPath)",
+      "Start-Sleep -Seconds 3",
+      "[IO.File]::WriteAllText($MarkerPath, 'late', [Text.UTF8Encoding]::new($false))",
+    ].join("\r\n"), "utf8");
+    writeFileSync(harnessScript, [
+      `$ErrorActionPreference = 'Stop'`,
+      `. ${quote(helperScript)}`,
+      `$helper = Start-Process -FilePath 'powershell.exe' -ArgumentList @(`,
+      `  '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',`,
+      `  '-File', ${quote(delayedScript)}, '-MarkerPath', ${quote(markerPath)}`,
+      `) -WindowStyle Hidden -PassThru`,
+      `$null = $helper.Handle`,
+      `$exitedInTime = Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 1`,
+      `if ($exitedInTime) { throw 'helper_exited_unexpectedly' }`,
+      `Stop-SupportAutopilotProcess -Process $helper`,
+      `Start-Sleep -Milliseconds 3500`,
+      `$helper.Refresh()`,
+      `[pscustomobject]@{`,
+      `  helperExited = $helper.HasExited`,
+      `  markerExists = Test-Path -LiteralPath ${quote(markerPath)} -PathType Leaf`,
+      `} | ConvertTo-Json -Compress`,
+    ].join("\r\n"), "utf8");
+    try {
+      const result = spawnSync("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        harnessScript,
+      ], { encoding: "utf8", timeout: 10_000, windowsHide: true });
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({
+        helperExited: true,
+        markerExists: false,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 15_000);
 
   it("preserves recovery evidence until the old credential is confirmed healthy", () => {
     const source = script("invoke-support-autopilot-credential-supervisor.ps1");

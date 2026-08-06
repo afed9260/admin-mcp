@@ -43,6 +43,18 @@ describe("support autopilot Windows process launcher", () => {
     const stderrPath = path.join(root, "runner.stderr.log");
     const stopPath = path.join(root, "runner.stop");
     let processId = 0;
+    const waitForExit = async (timeoutMs: number): Promise<boolean> => {
+      const deadline = Date.now() + timeoutMs;
+      do {
+        try {
+          process.kill(processId, 0);
+        } catch {
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } while (Date.now() < deadline);
+      return false;
+    };
     try {
       writeFileSync(entryPoint, [
         'const { existsSync } = require("node:fs");',
@@ -67,19 +79,19 @@ describe("support autopilot Windows process launcher", () => {
 
       expect(() => process.kill(processId, 0)).not.toThrow();
     } finally {
+      let stopped = true;
       if (processId > 0) {
         writeFileSync(stopPath, "", "utf8");
-        for (let attempt = 0; attempt < 40; attempt += 1) {
-          try {
-            process.kill(processId, 0);
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          } catch {
-            break;
-          }
+        stopped = await waitForExit(5_000);
+        if (!stopped) {
+          try { process.kill(processId); } catch {}
+          stopped = await waitForExit(5_000);
         }
-        try { process.kill(processId); } catch {}
       }
-      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 50 });
+      if (stopped) {
+        rmSync(root, { force: true, maxRetries: 100, recursive: true, retryDelay: 100 });
+      }
+      expect(stopped, `detached process ${processId} did not exit`).toBe(true);
     }
   });
 

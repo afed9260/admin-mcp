@@ -25,6 +25,8 @@ $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
 $SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
 . $SecurityScript
+$ProcessHelperScript = Join-Path $PSScriptRoot 'support-autopilot-windows-process-helper.ps1'
+. $ProcessHelperScript
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $ActiveCredentialPath = Join-Path $CredentialRoot 'support-autopilot.dpapi'
 $RollbackCredentialPath = Join-Path $CredentialRoot 'support-autopilot.rollback.dpapi'
@@ -212,7 +214,7 @@ function Get-ExactRunnerProcess {
     Where-Object {
       $_.ExecutablePath -ieq $NodeExecutable -and
       $_.CommandLine -match $pattern
-    })
+  })
 }
 
 function Start-Runner {
@@ -257,20 +259,61 @@ function Start-Runner {
     -RedirectStandardOutput $RunnerStartStdoutPath `
     -RedirectStandardError $RunnerStartStderrPath `
     -PassThru
+  $null = $helper.Handle
   $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
   $launched = @()
-  do {
-    Start-Sleep -Milliseconds 100
-    $launched = @(Get-ExactRunnerProcess)
-    if ($launched.Count -gt 1) {
-      throw 'multiple_exact_runner_processes'
+  try {
+    do {
+      Start-Sleep -Milliseconds 100
+      $launched = @(Get-ExactRunnerProcess)
+      if ($launched.Count -gt 1) {
+        throw 'multiple_exact_runner_processes'
+      }
+      if ($launched.Count -eq 1) {
+        break
+      }
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    if ($launched.Count -ne 1) {
+      throw 'runner_start_not_observed'
     }
-    if ($launched.Count -eq 1) {
-      break
+    if (-not (Wait-SupportAutopilotProcessExit -Process $helper -TimeoutSeconds 5)) {
+      Stop-SupportAutopilotProcess -Process $helper
+      throw 'runner_start_helper_timeout'
     }
-  } while ([DateTimeOffset]::UtcNow -lt $deadline)
-  if ($launched.Count -ne 1) {
-    throw 'runner_start_not_observed'
+    $helper.Refresh()
+    if ($helper.ExitCode -ne 0) {
+      throw 'runner_start_helper_failed'
+    }
+    $helperOutput = Get-Content -LiteralPath $RunnerStartStdoutPath -Raw -Encoding UTF8
+    $helperLines = @($helperOutput -split '\r?\n' | Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_)
+    })
+    if ($helperLines.Count -ne 1) {
+      throw 'runner_start_helper_output_invalid'
+    }
+    $helperResult = $helperLines[0] | ConvertFrom-Json
+    if (
+      $helperResult.started -ne $true -or
+      [long]$helperResult.processId -ne [long]$launched[0].ProcessId
+    ) {
+      throw 'runner_start_helper_pid_mismatch'
+    }
+  }
+  catch {
+    $helperFailureOutcome = switch ($_.Exception.Message) {
+      'runner_start_helper_timeout' { 'timeout' }
+      'runner_start_helper_failed' { 'exit_code' }
+      'runner_start_helper_output_invalid' { 'output_invalid' }
+      'runner_start_helper_pid_mismatch' { 'pid_mismatch' }
+      'support_autopilot_process_stop_failed' { 'stop_failed' }
+      default { 'fixed_failure' }
+    }
+    Write-SupportAutopilotRedactedEvent `
+      -EventPath $EventPath `
+      -EventCode 'runner_start_helper_failed' `
+      -Outcome $helperFailureOutcome
+    Stop-SupportAutopilotProcess -Process $helper
+    throw
   }
   Write-SupportAutopilotRedactedEvent `
     -EventPath $EventPath `
