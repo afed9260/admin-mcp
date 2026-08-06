@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "support-autopilot:readiness": "node dist/runner/support-autopilot-readiness-main.js",
+    "support-autopilot:local-health": "node dist/runner/support-autopilot-local-health-main.js",
     "support-autopilot:shadow": "node dist/runner/support-autopilot-shadow-main.js",
     "support-autopilot:synthetic-canary": "node dist/synthetic/support-autopilot-synthetic-canary-main.js",
     "test": "vitest run",
