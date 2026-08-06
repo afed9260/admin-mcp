@@ -58,6 +58,7 @@ describe("runSupportAutopilotLocalHealth", () => {
       privacyGatePassed: true,
       reachable: true,
       runnerFresh: true,
+      runnerLastSeenAt: "2026-08-06T08:59:59.000Z",
       runnerReady: true,
       shadowModeEnabled: true,
     });

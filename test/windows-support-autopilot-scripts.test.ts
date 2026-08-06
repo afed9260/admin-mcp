@@ -168,6 +168,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     const runnerEntryPoint = path.join(runnerRoot, "support-autopilot-shadow-main.js");
     const drainPath = path.join(stateRoot, "shadow-runner.drain");
     const fakeGitHubStatePath = path.join(stateRoot, "fake-gh-runs.json");
+    const fakeHeartbeatPath = path.join(stateRoot, "fake-runner-heartbeat.txt");
     mkdirSync(runnerRoot, { recursive: true });
     mkdirSync(scriptRoot, { recursive: true });
     mkdirSync(stateRoot, { recursive: true });
@@ -234,7 +235,11 @@ describe("Windows support autopilot lifecycle scripts", () => {
     }), "utf8");
 
     const initialRunner = spawn(process.execPath, [runnerEntryPoint], {
-      env: { ...process.env, SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH: drainPath },
+      env: {
+        ...process.env,
+        SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH: drainPath,
+        SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH: fakeHeartbeatPath,
+      },
       stdio: "ignore",
       windowsHide: true,
     });
@@ -258,6 +263,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
         env: {
           ...process.env,
           SUPPORT_AUTOPILOT_FAKE_GH_STATE_PATH: fakeGitHubStatePath,
+          SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH: fakeHeartbeatPath,
         },
         timeout: 30_000,
         windowsHide: true,
@@ -345,6 +351,20 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("$queueTimedOut -and -not $cancelRequested");
     expect(source).not.toContain("($queueTimedOut -or $overallTimedOut)");
     expect(source).not.toContain("--ref main");
+  });
+
+  it("uses authenticated health instead of a locked stderr file for readiness", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const waitReady = source.slice(
+      source.indexOf("function Wait-RunnerReady"),
+      source.indexOf("function Get-WorkflowSha"),
+    );
+
+    expect(waitReady).not.toContain("[IO.File]::ReadAllText");
+    expect(waitReady).toContain("Get-QueueHealth");
+    expect(waitReady).toContain("Assert-QueueGatesReady");
+    expect(waitReady).toContain("heartbeatBaseline");
+    expect(waitReady).toContain("runnerLastSeenAt");
   });
 
   it("preserves recovery evidence until the old credential is confirmed healthy", () => {

@@ -156,6 +156,11 @@ intact for deterministic inspection. The old runner is restored only after the
 exact run is terminal and the old credential still passes its dedicated health
 boundary. If that credential is already expired, a failed workflow also keeps
 the journal and candidate instead of discarding the only recovery evidence.
+Runner restart readiness is taken only from the authenticated health response:
+the backend must report `runnerReady=true`, all support automation gates ready,
+and a heartbeat newer than the value captured before a newly started process.
+The live redirected stderr file is diagnostic output, not a synchronization
+boundary.
 
 If the computer was offline long enough for the dedicated credential to expire,
 the watchdog leaves the runner stopped. The supervisor waits thirty minutes
