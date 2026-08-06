@@ -25,7 +25,7 @@ windowsDescribe("Windows support autopilot security helpers", () => {
           "Write-SupportAutopilotRedactedEvent -EventPath $env:SUPPORT_AUTOPILOT_TEST_EVENT -EventCode 'credential_rotation_stage' -Stage 'candidate_ready'",
           "$acl = Get-Acl -LiteralPath $env:SUPPORT_AUTOPILOT_TEST_EVENT",
           "$rules = @($acl.Access | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)",
-          "[pscustomobject]@{ protected = $acl.AreAccessRulesProtected; rules = $rules } | ConvertTo-Json -Compress",
+          "[pscustomobject]@{ owner = $acl.Owner; protected = $acl.AreAccessRulesProtected; rules = $rules } | ConvertTo-Json -Compress",
         ].join("; "),
       ], {
         encoding: "utf8",
@@ -39,11 +39,16 @@ windowsDescribe("Windows support autopilot security helpers", () => {
       });
 
       expect(result.status, result.stderr).toBe(0);
-      const acl = JSON.parse(result.stdout.trim()) as { protected: boolean; rules: string[] };
+      const acl = JSON.parse(result.stdout.trim()) as {
+        owner: string;
+        protected: boolean;
+        rules: string[];
+      };
       const currentIdentity = spawnSync("whoami.exe", [], {
         encoding: "utf8",
         windowsHide: true,
       }).stdout.trim().toLowerCase();
+      expect(acl.owner.toLowerCase()).toBe(currentIdentity);
       expect(acl.protected).toBe(true);
       expect(acl.rules.map((rule) => rule.toLowerCase())).toEqual([currentIdentity]);
 

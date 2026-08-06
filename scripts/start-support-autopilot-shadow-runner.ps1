@@ -211,8 +211,7 @@ if ($existing.Count -eq 1) {
     -File $StopScript `
     -InstallRoot $InstallRoot `
     -NodeExecutable $NodeExecutable `
-    -StopTimeoutSeconds 120 `
-    -ForceAfterTimeout | Out-Null
+    -StopTimeoutSeconds 720 | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw 'stale_runner_stop_failed'
   }

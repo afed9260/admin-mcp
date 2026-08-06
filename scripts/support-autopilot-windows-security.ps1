@@ -14,6 +14,15 @@ function Set-SupportAutopilotCurrentUserAcl {
   }
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
   $account = [Security.Principal.NTAccount]::new($identity)
+  $currentAcl = Get-Acl -LiteralPath $resolvedPath
+  if ($currentAcl.Owner -ine $identity) {
+    $currentAcl.SetOwner($account)
+    Set-Acl -LiteralPath $resolvedPath -AclObject $currentAcl
+    $currentAcl = Get-Acl -LiteralPath $resolvedPath
+    if ($currentAcl.Owner -ine $identity) {
+      throw 'support_autopilot_acl_owner_mismatch'
+    }
+  }
   if ($Container) {
     $acl = [Security.AccessControl.DirectorySecurity]::new()
     $inheritance = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
@@ -25,9 +34,9 @@ function Set-SupportAutopilotCurrentUserAcl {
     $inheritance = [Security.AccessControl.InheritanceFlags]::None
     $propagation = [Security.AccessControl.PropagationFlags]::None
   }
-  $currentAcl = Get-Acl -LiteralPath $resolvedPath
   $currentRules = @($currentAcl.Access)
   if (
+    $currentAcl.Owner -ieq $identity -and
     $currentAcl.AreAccessRulesProtected -and
     $currentRules.Count -eq 1 -and
     $currentRules[0].IdentityReference.Value -ieq $identity -and

@@ -15,7 +15,7 @@
     "support-autopilot:synthetic-canary": "node dist/synthetic/support-autopilot-synthetic-canary-main.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify": "tsc -p tsconfig.json --noEmit && vitest run && tsc -p tsconfig.json"
+    "verify": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.json && vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.5",

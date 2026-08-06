@@ -150,9 +150,12 @@ a fresh candidate and a second guarded rotation; it is never replaced by a
 one-off local send. A confirmed failed workflow is recovered only when
 the old credential still passes the dedicated health boundary. Ambiguous state
 fails closed and remains in the journal for the next audited recovery attempt.
-Queued workflow runs are cancelled after a bounded wait; the old runner is
-restored only after the exact run is terminal and the old credential still
-passes its dedicated health boundary.
+Queued workflow runs are cancelled after a bounded wait. An in-progress run is
+never cancelled by the local timeout; its journal and encrypted candidate stay
+intact for deterministic inspection. The old runner is restored only after the
+exact run is terminal and the old credential still passes its dedicated health
+boundary. If that credential is already expired, a failed workflow also keeps
+the journal and candidate instead of discarding the only recovery evidence.
 
 If the computer was offline long enough for the dedicated credential to expire,
 the watchdog leaves the runner stopped. The supervisor waits thirty minutes

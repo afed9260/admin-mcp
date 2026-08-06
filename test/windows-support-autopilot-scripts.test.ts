@@ -61,6 +61,8 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("SUPPORT_AUTOPILOT_RUNNER_START_FAILED");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
+    expect(source).toContain("-StopTimeoutSeconds 720");
+    expect(source).not.toContain("-ForceAfterTimeout | Out-Null");
   });
 
   it("stops only the exact runner process and verifies bounded shutdown", () => {
@@ -339,8 +341,35 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("Test-ProductionRunnerAvailable");
     expect(source).toContain("correlated_workflow_cancel_failed");
     expect(source).toContain("expired_lease_grace");
-    expect(source).toContain("remote_failed_expired_retry");
+    expect(source).toContain("remote_failed_expired_preserved");
+    expect(source).toContain("$queueTimedOut -and -not $cancelRequested");
+    expect(source).not.toContain("($queueTimedOut -or $overallTimedOut)");
     expect(source).not.toContain("--ref main");
+  });
+
+  it("preserves recovery evidence until the old credential is confirmed healthy", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const failedWorkflow = source.slice(source.indexOf("if ($_.Exception.Message -ne 'correlated_workflow_failed')"));
+
+    expect(failedWorkflow.indexOf("remote_failed_expired_preserved")).toBeLessThan(
+      failedWorkflow.indexOf("Get-QueueHealth | Out-Null"),
+    );
+    expect(failedWorkflow.indexOf("Get-QueueHealth | Out-Null")).toBeLessThan(
+      failedWorkflow.indexOf("Remove-Item -LiteralPath $pending.candidatePath"),
+    );
+    expect(failedWorkflow.indexOf("Remove-Item -LiteralPath $pending.candidatePath")).toBeLessThan(
+      failedWorkflow.indexOf("Write-RotationState (New-StateForStage $state $null)"),
+    );
+  });
+
+  it("builds current executable artifacts before running recovery tests", () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve("package.json"), "utf8")) as {
+      scripts: { verify: string };
+    };
+
+    expect(packageJson.scripts.verify).toContain(
+      "&& tsc -p tsconfig.json && vitest run",
+    );
   });
 
   it("orders interruption recovery before every irreversible boundary", () => {

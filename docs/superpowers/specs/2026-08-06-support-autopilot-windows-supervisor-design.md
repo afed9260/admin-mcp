@@ -109,7 +109,9 @@ runtime remains empty.
 
 - Server unavailable, GitHub unavailable, or runner busy: no credential change;
   retry on the next fifteen-minute trigger.
-- Workflow failed: keep the canonical blob and restart the old runner.
+- Workflow failed with a valid old credential: confirm its dedicated health,
+  then remove the candidate and restart the old runner. With an expired old
+  credential, preserve the journal and candidate for audited recovery.
 - Server accepted but local promotion/start failed: retain the journal and
   candidate for deterministic recovery.
 - Credential expired before recovery: runner stays stopped, waits thirty
@@ -117,6 +119,9 @@ runtime remains empty.
   requiring the expired credential.
 - Correlation ambiguity, changed workflow SHA, unexpected response shape, or
   plaintext token environment: fail closed and record a redacted blocker.
+- A queued workflow may be cancelled after a bounded wait. An in-progress
+  workflow is never cancelled by the local timeout; its recovery state remains
+  intact until the exact run reaches a terminal state.
 
 ## Verification
 

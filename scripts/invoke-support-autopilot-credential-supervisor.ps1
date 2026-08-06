@@ -416,7 +416,7 @@ function Complete-CorrelatedWorkflow {
     $now = [DateTimeOffset]::UtcNow
     $queueTimedOut = [string]$current.status -eq 'queued' -and $now -ge $queueDeadline
     $overallTimedOut = $now -ge $overallDeadline
-    if (($queueTimedOut -or $overallTimedOut) -and -not $cancelRequested) {
+    if ($queueTimedOut -and -not $cancelRequested) {
       & $GitHubCliPath run cancel ([string]$WorkflowRunId) --repo $Repository 2>$null |
         Out-Null
       if ($LASTEXITCODE -ne 0) {
@@ -425,7 +425,7 @@ function Complete-CorrelatedWorkflow {
       $cancelRequested = $true
       $overallDeadline = [DateTimeOffset]::UtcNow.AddMinutes(5)
     }
-    elseif ($overallTimedOut -and $cancelRequested) {
+    elseif ($overallTimedOut) {
       throw 'correlated_workflow_ambiguous'
     }
     Start-Sleep -Seconds 5
@@ -833,23 +833,19 @@ try {
         if ($_.Exception.Message -ne 'correlated_workflow_failed') {
           throw
         }
-        if (Test-Path -LiteralPath $pending.candidatePath -PathType Leaf) {
-          Remove-Item -LiteralPath $pending.candidatePath -Force
-        }
-        Write-RotationState (New-StateForStage $state $null)
         if ($expiredRecovery) {
           Write-SupportAutopilotRedactedEvent `
             -EventPath $EventPath `
             -EventCode 'credential_rotation_recovered' `
             -RequestId ([string]$pending.requestId) `
-            -Outcome 'remote_failed_expired_retry'
-          [pscustomobject]@{
-            outcome = 'remote_failed_expired_retry'
-            rotated = $false
-          } | ConvertTo-Json -Compress
-          exit 0
+            -Outcome 'remote_failed_expired_preserved'
+          throw 'expired_workflow_failure_requires_recovery'
         }
         Get-QueueHealth | Out-Null
+        if (Test-Path -LiteralPath $pending.candidatePath -PathType Leaf) {
+          Remove-Item -LiteralPath $pending.candidatePath -Force
+        }
+        Write-RotationState (New-StateForStage $state $null)
         Start-Runner
         Wait-RunnerReady
         Write-SupportAutopilotRedactedEvent `
