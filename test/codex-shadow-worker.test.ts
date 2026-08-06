@@ -92,7 +92,18 @@ describe("CodexShadowWorker", () => {
   });
 
   it("converts malformed JSONL to a redacted failure", async () => {
-    const worker = new CodexShadowWorker(config, runner("customer secret\n"));
+    const events: CodexShadowWorkerEvent[] = [];
+    const worker = new CodexShadowWorker(
+      config,
+      runner("customer secret\n"),
+      (event) => events.push(event),
+    );
     await expect(worker.runOne()).rejects.toThrow("SUPPORT_AUTOPILOT_CODEX_RUN_FAILED");
+    expect(events).toContainEqual(expect.objectContaining({
+      eventCode: "codex_shadow_run_failed",
+      failureCode: "CODEX_RUN_INVALID",
+      failureStage: "jsonl_invalid",
+    }));
+    expect(JSON.stringify(events)).not.toContain("customer secret");
   });
 });

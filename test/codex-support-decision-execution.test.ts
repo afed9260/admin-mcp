@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { runCodexSupportDecision } from "../src/runner/codex-support-decision-execution.js";
+import {
+  CodexSupportDecisionError,
+  runCodexSupportDecision,
+} from "../src/runner/codex-support-decision-execution.js";
 import type { CodexProcessInput, CodexProcessRunner } from "../src/runner/codex-process-runner.js";
 
 function toolEvent(tool: string, status = "completed", error: unknown = null): string {
@@ -20,6 +23,58 @@ function runner(stdout: string) {
 }
 
 describe("runCodexSupportDecision", () => {
+  it.each([
+    ["missing decision", `${toolEvent("claim_support_automation_job")}\n`, {}, "decision_count_invalid"],
+    ["too many tool failures", [
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision", "failed"),
+      toolEvent("submit_support_automation_decision"),
+      "",
+    ].join("\n"), {}, "tool_failure_budget_exceeded"],
+    ["nonzero exit", `${toolEvent("submit_support_automation_decision")}\n`, { exitCode: 1 }, "process_exit_nonzero"],
+    ["timeout", `${toolEvent("submit_support_automation_decision")}\n`, { timedOut: true }, "process_timeout"],
+    ["malformed JSONL", "customer secret\n", {}, "jsonl_invalid"],
+  ])("classifies %s without exposing process output", async (_name, stdout, override, stage) => {
+    const processRunner = runner(stdout);
+    processRunner.run.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "provider secret",
+      stdout,
+      timedOut: false,
+      ...override,
+    });
+
+    const failure = await runCodexSupportDecision({
+      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
+      codexExecutablePath: "C:\\Tools\\codex.exe",
+      processTimeoutMs: 120_000,
+      runtimeDir: "C:\\Synthetic\\runtime",
+      workerId: "support-synthetic.1",
+    }, processRunner).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CodexSupportDecisionError);
+    expect(failure).toMatchObject({ stage });
+    expect(JSON.stringify(failure)).not.toMatch(/customer secret|provider secret/);
+  });
+
+  it("classifies process launch failures without exposing the original error", async () => {
+    const processRunner = runner("");
+    processRunner.run.mockRejectedValueOnce(new Error("process secret"));
+
+    const failure = await runCodexSupportDecision({
+      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
+      codexExecutablePath: "C:\\Tools\\codex.exe",
+      processTimeoutMs: 120_000,
+      runtimeDir: "C:\\Synthetic\\runtime",
+      workerId: "support-synthetic.1",
+    }, processRunner).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CodexSupportDecisionError);
+    expect(failure).toMatchObject({ stage: "process_launch_failed" });
+    expect(JSON.stringify(failure)).not.toContain("process secret");
+  });
+
   it("runs one restricted decision and returns only the validated summary", async () => {
     const processRunner = runner([
       toolEvent("claim_support_automation_job"),

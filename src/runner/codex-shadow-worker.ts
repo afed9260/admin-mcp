@@ -1,5 +1,9 @@
 import { performance } from "node:perf_hooks";
-import { runCodexSupportDecision } from "./codex-support-decision-execution.js";
+import {
+  CodexSupportDecisionError,
+  runCodexSupportDecision,
+  type CodexSupportDecisionFailureStage,
+} from "./codex-support-decision-execution.js";
 import { createCodexChildEnvironment } from "./codex-shadow-preflight.js";
 import type { CodexProcessRunner } from "./codex-process-runner.js";
 import type { SupportAutopilotShadowRunnerConfig } from "./support-autopilot-shadow-runner.config.js";
@@ -13,7 +17,12 @@ export type CodexShadowWorkerEvent =
     failedToolCallCount: number;
     toolCallCount: number;
   }
-  | { durationMs: number; eventCode: "codex_shadow_run_failed"; failureCode: "CODEX_RUN_INVALID" };
+  | {
+    durationMs: number;
+    eventCode: "codex_shadow_run_failed";
+    failureCode: "CODEX_RUN_INVALID";
+    failureStage: CodexSupportDecisionFailureStage | "unexpected_internal";
+  };
 
 export class CodexShadowWorker {
   constructor(
@@ -47,11 +56,14 @@ export class CodexShadowWorker {
         successfulDecisionSubmissions: 1,
         toolCalls: summary.toolCalls,
       };
-    } catch {
+    } catch (error: unknown) {
       this.log({
         durationMs: Math.round(performance.now() - startedAt),
         eventCode: "codex_shadow_run_failed",
         failureCode: "CODEX_RUN_INVALID",
+        failureStage: error instanceof CodexSupportDecisionError
+          ? error.stage
+          : "unexpected_internal",
       });
       throw new Error("SUPPORT_AUTOPILOT_CODEX_RUN_FAILED");
     }
