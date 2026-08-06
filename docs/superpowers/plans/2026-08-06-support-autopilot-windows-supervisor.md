@@ -24,11 +24,11 @@ Task Scheduler, GitHub CLI, GitHub Actions.
 **Files:**
 
 - Create: `src/runner/support-autopilot-credential-supervisor.ts`
-- Create: `test/support-autopilot-credential-supervisor.spec.ts`
+- Create: `test/support-autopilot-credential-supervisor.test.ts`
 
 - [ ] Write failing tests for strict non-secret metadata parsing, six-hour
   renewal timing, recoverable stages, and exact GitHub run selection.
-- [ ] Run `corepack pnpm vitest run test/support-autopilot-credential-supervisor.spec.ts`
+- [ ] Run `corepack pnpm vitest run test/support-autopilot-credential-supervisor.test.ts`
   and verify the new tests fail because the module is absent.
 - [ ] Implement the minimum pure TypeScript contracts and selectors.
 - [ ] Rerun the focused test and verify it passes.

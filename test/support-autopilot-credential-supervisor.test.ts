@@ -36,18 +36,30 @@ describe("support autopilot credential supervisor policy", () => {
 
     expect(shouldRotateCredential(
       metadata,
-      new Date("2026-08-07T01:59:59.999Z"),
+      new Date("2026-08-07T02:00:00.000Z"),
     )).toBe(false);
     expect(shouldRotateCredential(
       metadata,
-      new Date("2026-08-07T02:00:00.000Z"),
+      new Date("2026-08-07T02:00:00.001Z"),
     )).toBe(true);
   });
 
-  it("parses only recoverable non-secret journal fields", () => {
-    const state = {
+  it("enforces stage-specific recovery fields in the non-secret journal", () => {
+    const base = {
       schemaVersion: 1,
       activeCredential: { issuedAt: ISSUED_AT, expiresAt: EXPIRES_AT },
+      updatedAt: "2026-08-06T09:05:00.000Z",
+    } as const;
+    const runnerStopped = {
+      ...base,
+      pendingRotation: {
+        stage: "runner_stopped",
+        requestId: REQUEST_ID,
+        expectedHeadSha: HEAD_SHA,
+      },
+    };
+    const serverAccepted = {
+      ...base,
       pendingRotation: {
         stage: "server_accepted",
         requestId: REQUEST_ID,
@@ -58,13 +70,17 @@ describe("support autopilot credential supervisor policy", () => {
         expectedHeadSha: HEAD_SHA,
         workflowRunId: 123456,
       },
-      updatedAt: "2026-08-06T09:05:00.000Z",
     };
 
-    expect(parseCredentialRotationState(state)).toEqual(state);
+    expect(parseCredentialRotationState(runnerStopped)).toEqual(runnerStopped);
+    expect(parseCredentialRotationState(serverAccepted)).toEqual(serverAccepted);
     expect(() => parseCredentialRotationState({
-      ...state,
-      pendingRotation: { ...state.pendingRotation, rawToken: "forbidden" },
+      ...serverAccepted,
+      pendingRotation: { ...serverAccepted.pendingRotation, rawToken: "forbidden" },
+    })).toThrow("invalid credential rotation state");
+    expect(() => parseCredentialRotationState({
+      ...serverAccepted,
+      pendingRotation: { ...serverAccepted.pendingRotation, workflowRunId: null },
     })).toThrow("invalid credential rotation state");
   });
 
@@ -74,6 +90,7 @@ describe("support autopilot credential supervisor policy", () => {
       databaseId: 42,
       displayTitle: title,
       event: "workflow_dispatch",
+      headBranch: "main",
       headSha: HEAD_SHA,
       status: "completed",
       conclusion: "success",
@@ -91,6 +108,7 @@ describe("support autopilot credential supervisor policy", () => {
       databaseId: 42,
       displayTitle: title,
       event: "workflow_dispatch",
+      headBranch: "main",
       headSha: HEAD_SHA,
       status: "completed",
       conclusion: "success",
@@ -101,6 +119,10 @@ describe("support autopilot credential supervisor policy", () => {
       .toThrow("credential rotation run not found");
     expect(() => selectCredentialRotationRun([run, { ...run, databaseId: 43 }], expected))
       .toThrow("credential rotation run is ambiguous");
+    expect(() => selectCredentialRotationRun([{ ...run, displayTitle: `${title}-near-match` }], expected))
+      .toThrow("credential rotation run not found");
+    expect(() => selectCredentialRotationRun([{ ...run, headBranch: "feature" }], expected))
+      .toThrow("credential rotation run branch mismatch");
     expect(() => selectCredentialRotationRun([{ ...run, headSha: "d".repeat(40) }], expected))
       .toThrow("credential rotation run revision mismatch");
     expect(() => selectCredentialRotationRun([{ ...run, conclusion: "failure" }], expected))

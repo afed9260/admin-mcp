@@ -38,23 +38,47 @@ const generatedCredentialMetadataSchema = z.object({
   tokenSha256: z.string().regex(SHA256_PATTERN),
 }).strict().superRefine(validateCredentialLifetime);
 
-const pendingRotationSchema = z.object({
+const pendingRotationIdentityFields = {
+  requestId: z.string().regex(UUID_PATTERN),
+  expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
+};
+const pendingRotationCandidateFields = {
+  ...pendingRotationIdentityFields,
   ...credentialWindowFields,
   tokenSha256: z.string().regex(SHA256_PATTERN),
-  stage: z.enum([
-    "candidate_ready",
-    "runner_stopped",
-    "workflow_dispatched",
-    "server_accepted",
-    "candidate_promoted",
-  ]),
-  requestId: z.string().regex(UUID_PATTERN),
   candidatePath: z.string()
     .regex(WINDOWS_ABSOLUTE_PATH_PATTERN)
     .refine((value) => !value.includes("\0")),
-  expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
-  workflowRunId: z.number().int().positive().safe().nullable(),
-}).strict().superRefine(validateCredentialLifetime);
+};
+const pendingRotationSchema = z.union([
+  z.object({
+    ...pendingRotationIdentityFields,
+    stage: z.literal("runner_stopped"),
+  }).strict(),
+  z.object({
+    ...pendingRotationCandidateFields,
+    stage: z.literal("candidate_ready"),
+  }).strict(),
+  z.object({
+    ...pendingRotationCandidateFields,
+    stage: z.literal("workflow_dispatched"),
+    workflowRunId: z.number().int().positive().safe().nullable(),
+  }).strict(),
+  z.object({
+    ...pendingRotationCandidateFields,
+    stage: z.literal("server_accepted"),
+    workflowRunId: z.number().int().positive().safe(),
+  }).strict(),
+  z.object({
+    ...pendingRotationCandidateFields,
+    stage: z.literal("candidate_promoted"),
+    workflowRunId: z.number().int().positive().safe(),
+  }).strict(),
+]).superRefine((value, context) => {
+  if ("issuedAt" in value) {
+    validateCredentialLifetime(value, context);
+  }
+});
 
 const credentialRotationStateSchema = z.object({
   schemaVersion: z.literal(1),
@@ -71,6 +95,7 @@ export interface CredentialRotationRun {
   databaseId: number;
   displayTitle: string;
   event: string;
+  headBranch: string;
   headSha: string;
   status: string;
 }
@@ -100,7 +125,7 @@ export function shouldRotateCredential(
   if (!Number.isFinite(now.getTime()) || !Number.isSafeInteger(leadTimeMs) || leadTimeMs < 0) {
     throw new Error("invalid credential rotation clock");
   }
-  return Date.parse(parsed.expiresAt) - now.getTime() <= leadTimeMs;
+  return Date.parse(parsed.expiresAt) - now.getTime() < leadTimeMs;
 }
 
 export function credentialRotationRunTitle(requestId: string): string {
@@ -132,6 +157,9 @@ export function selectCredentialRotationRun(
   if (run.event !== "workflow_dispatch") {
     throw new Error("credential rotation run event mismatch");
   }
+  if (run.headBranch !== "main") {
+    throw new Error("credential rotation run branch mismatch");
+  }
   if (run.headSha !== expected.expectedHeadSha) {
     throw new Error("credential rotation run revision mismatch");
   }
@@ -150,6 +178,7 @@ function isCredentialRotationRun(value: unknown): value is CredentialRotationRun
     && Number(value.databaseId) > 0
     && typeof value.displayTitle === "string"
     && typeof value.event === "string"
+    && typeof value.headBranch === "string"
     && typeof value.headSha === "string"
     && typeof value.status === "string"
     && (typeof value.conclusion === "string" || value.conclusion === null)
