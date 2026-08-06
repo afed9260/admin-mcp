@@ -244,6 +244,11 @@ The Codex invocation auto-approves tools only on the preflight-validated `suppor
 
 Raw prompts, ticket text, message text, attachment bytes, tool arguments/results, proposed replies, lease tokens, stdout, and stderr are never written to runner logs. Durable local state contains only the Moscow date and invocation count. Logs contain event codes, timestamps, durations, and counters.
 
+Failed Codex decision runs also include one bounded `failureStage`: process launch,
+non-zero exit, timeout, invalid JSONL, excessive failed tool calls, invalid decision
+count, or unexpected internal failure. The stage never includes process output,
+customer data, credentials, identifiers, or tool payloads.
+
 ## Offline Synthetic Canary
 
 The offline synthetic canary may run before the production privacy attestation is approved because its MCP server contains only deterministic fictional data. It never loads an Admin API URL, service credential, DPAPI blob, production launcher, customer attachment, budget state, or delivery path. It is a foreground developer command and must not be installed as a service or scheduled task.
