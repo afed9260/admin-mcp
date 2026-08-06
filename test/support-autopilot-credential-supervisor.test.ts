@@ -55,7 +55,6 @@ describe("support autopilot credential supervisor policy", () => {
       pendingRotation: {
         stage: "runner_stopped",
         requestId: REQUEST_ID,
-        expectedHeadSha: HEAD_SHA,
       },
     };
     const serverAccepted = {

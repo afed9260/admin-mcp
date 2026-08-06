@@ -40,7 +40,6 @@ const generatedCredentialMetadataSchema = z.object({
 
 const pendingRotationIdentityFields = {
   requestId: z.string().regex(UUID_PATTERN),
-  expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
 };
 const pendingRotationCandidateFields = {
   ...pendingRotationIdentityFields,
@@ -62,16 +61,19 @@ const pendingRotationSchema = z.union([
   z.object({
     ...pendingRotationCandidateFields,
     stage: z.literal("workflow_dispatched"),
+    expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
     workflowRunId: z.number().int().positive().safe().nullable(),
   }).strict(),
   z.object({
     ...pendingRotationCandidateFields,
     stage: z.literal("server_accepted"),
+    expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
     workflowRunId: z.number().int().positive().safe(),
   }).strict(),
   z.object({
     ...pendingRotationCandidateFields,
     stage: z.literal("candidate_promoted"),
+    expectedHeadSha: z.string().regex(GIT_SHA_PATTERN),
     workflowRunId: z.number().int().positive().safe(),
   }).strict(),
 ]).superRefine((value, context) => {
