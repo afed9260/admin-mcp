@@ -32,6 +32,7 @@ export interface CodexSupportDecisionExecutionConfig {
   childEnvironment: NodeJS.ProcessEnv;
   codexExecutablePath: string;
   processTimeoutMs: number;
+  onProcessInvocationStarted?: () => void;
   runtimeDir: string;
   workerId: string;
   workKind: SupportAutomationWorkKind;
@@ -43,14 +44,17 @@ export async function runCodexSupportDecision(
 ): Promise<CodexJsonlSummary> {
   let result;
   try {
-    result = await processRunner.run({
+    const processInput = {
       args: [
         ...CODEX_RESTRICTED_EXEC_ARGS,
         "--cd", config.runtimeDir,
         "-",
       ],
       cwd: config.runtimeDir,
-      environment: config.childEnvironment,
+      environment: {
+        ...config.childEnvironment,
+        SUPPORT_AUTOPILOT_WORK_KIND: config.workKind,
+      },
       executablePath: config.codexExecutablePath,
       maxOutputBytes: 16 * 1024 * 1024,
       stdin: buildSupportAutopilotWorkerPrompt(
@@ -59,7 +63,9 @@ export async function runCodexSupportDecision(
         config.assignedRevision,
       ),
       timeoutMs: config.processTimeoutMs,
-    });
+    };
+    config.onProcessInvocationStarted?.();
+    result = await processRunner.run(processInput);
   } catch {
     throw new CodexSupportDecisionError("process_launch_failed");
   }
@@ -102,19 +108,20 @@ export function buildSupportAutopilotWorkerPrompt(
   if (workKind === "initial" && assignedRevision !== undefined) {
     throw new Error("ASSIGNED_SUPPORT_REVISION_FORBIDDEN");
   }
-  const allowedTools = [
-    "get_support_automation_work_availability",
-    "claim_support_automation_job",
-    "renew_support_automation_lease",
-    "get_support_automation_context",
-    "get_support_automation_attachment",
-    "submit_support_automation_decision",
-    "get_support_automation_health",
-    "claim_support_automation_revision",
-    "renew_support_automation_revision_lease",
-    "get_support_automation_revision_context",
-    "submit_support_automation_revision",
-  ].join(", ");
+  const allowedTools = (workKind === "initial"
+    ? [
+        "get_support_automation_work_availability",
+        "claim_support_automation_job",
+        "renew_support_automation_lease",
+        "get_support_automation_context",
+        "get_support_automation_attachment",
+        "submit_support_automation_decision",
+        "get_support_automation_health",
+      ]
+    : [
+        "get_support_automation_revision_context",
+        "submit_support_automation_revision",
+      ]).join(", ");
   const workInstructions = workKind === "initial"
     ? [
         "The backend-selected workKind is initial.",

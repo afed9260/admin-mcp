@@ -81,6 +81,19 @@ describe("runCodexSupportDecision", () => {
     expect(JSON.stringify(failure)).not.toContain("process secret");
   });
 
+  it("does not mark an invocation before the process input is fully validated", async () => {
+    const processRunner = runner("");
+    const onProcessInvocationStarted = vi.fn();
+
+    await expect(runCodexSupportDecision(executionConfig({
+      onProcessInvocationStarted,
+      workKind: "revision",
+    }), processRunner)).rejects.toMatchObject({ stage: "process_launch_failed" });
+
+    expect(onProcessInvocationStarted).not.toHaveBeenCalled();
+    expect(processRunner.run).not.toHaveBeenCalled();
+  });
+
   it("runs one restricted decision and returns only the validated summary", async () => {
     const processRunner = runner([
       toolEvent("claim_support_automation_job"),
@@ -112,10 +125,14 @@ describe("runCodexSupportDecision", () => {
       "-",
     ]));
     expect(input.args.indexOf("--config")).toBeLessThan(input.args.indexOf("exec"));
-    expect(input.environment).toEqual({ CODEX_HOME: "C:\\Synthetic\\codex-home" });
+    expect(input.environment).toEqual({
+      CODEX_HOME: "C:\\Synthetic\\codex-home",
+      SUPPORT_AUTOPILOT_WORK_KIND: "initial",
+    });
     expect(input.stdin).toContain("support-synthetic.1");
     expect(input.stdin).toContain("top-level arguments");
     expect(input.stdin).toContain("never nest them under a decision object");
+    expect(input.stdin).not.toContain("submit_support_automation_revision");
     expect(input.stdin).not.toMatch(/ticket|leaseToken|proposedReply/i);
     expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
   });
@@ -190,6 +207,9 @@ describe("runCodexSupportDecision", () => {
     expect(prompt).toContain(
       "Call submit_support_automation_revision with all schema fields",
     );
+    expect(prompt).not.toContain("claim_support_automation_revision");
+    expect(prompt).not.toContain("renew_support_automation_revision_lease");
+    expect(prompt).not.toContain("submit_support_automation_decision with all schema fields");
 
     for (const output of [
       `${toolEvent("submit_support_automation_decision")}\n`,

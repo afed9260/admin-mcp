@@ -28,6 +28,13 @@ export interface SupportRevisionHostClient {
   ): Promise<unknown>;
 }
 
+export class CodexShadowWorkerFailure extends Error {
+  constructor(public readonly processInvocationStarted: boolean) {
+    super("SUPPORT_AUTOPILOT_CODEX_RUN_FAILED");
+    this.name = "CodexShadowWorkerFailure";
+  }
+}
+
 export type CodexShadowWorkerEvent =
   | {
     durationMs: number;
@@ -59,6 +66,7 @@ export class CodexShadowWorker {
     toolCalls: number;
   }> {
     const startedAt = performance.now();
+    let processInvocationStarted = false;
     let revisionLease: SupportAutomationRevisionLeaseIdentity | undefined;
     try {
       let processTimeoutMs = this.config.processTimeoutMs;
@@ -85,6 +93,9 @@ export class CodexShadowWorker {
         childEnvironment: createCodexChildEnvironment(this.config),
         codexExecutablePath: this.config.codexExecutablePath,
         processTimeoutMs,
+        onProcessInvocationStarted: () => {
+          processInvocationStarted = true;
+        },
         runtimeDir: this.config.runtimeDir,
         workerId: this.config.workerId,
         workKind,
@@ -117,7 +128,7 @@ export class CodexShadowWorker {
           : "unexpected_internal",
         workKind,
       });
-      throw new Error("SUPPORT_AUTOPILOT_CODEX_RUN_FAILED");
+      throw new CodexShadowWorkerFailure(processInvocationStarted);
     }
   }
 

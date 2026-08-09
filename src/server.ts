@@ -3,9 +3,15 @@ import { AdminApiClient } from "./backend/admin-api-client.js";
 import { SupportAutopilotApiClient } from "./backend/support-autopilot-api-client.js";
 import { AdminMcpConfig } from "./config.js";
 import { registerAdminTools, registerReadOnlyTools } from "./tools/register-tools.js";
-import { registerSupportAutopilotTools } from "./tools/support-autopilot-tools.js";
+import {
+  registerSupportAutopilotTools,
+  type SupportAutopilotToolScope,
+} from "./tools/support-autopilot-tools.js";
 
-export function createAdminMcpServer(config: AdminMcpConfig): McpServer {
+export function createAdminMcpServer(
+  config: AdminMcpConfig,
+  supportAutopilotToolScope?: SupportAutopilotToolScope,
+): McpServer {
   const server = new McpServer({ name: "admin-mcp", version: "0.1.0" });
 
   if (config.profile === "support_autopilot") {
@@ -15,6 +21,7 @@ export function createAdminMcpServer(config: AdminMcpConfig): McpServer {
         baseUrl: config.adminApiBaseUrl,
         token: config.adminApiToken,
       }),
+      supportAutopilotToolScope,
     );
     return server;
   }

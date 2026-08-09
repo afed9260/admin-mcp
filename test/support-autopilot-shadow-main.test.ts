@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { runSupportAutopilotShadowMain, type SupportAutopilotShadowMainEvent } from "../src/runner/support-autopilot-shadow-main.js";
+import { CodexShadowWorkerFailure } from "../src/runner/codex-shadow-worker.js";
 import type { SupportAutopilotShadowRunnerConfig } from "../src/runner/support-autopilot-shadow-runner.config.js";
 
 const config: Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }> = {
@@ -206,4 +207,39 @@ describe("runSupportAutopilotShadowMain", () => {
     expect(reserve).not.toHaveBeenCalled();
     expect(runOne).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [false, 1],
+    [true, 0],
+  ] as const)(
+    "releases a reservation only when worker failure happens before process launch: %s",
+    async (processInvocationStarted, expectedReleases) => {
+      const abort = new AbortController();
+      const release = vi.fn().mockResolvedValue(undefined);
+      const reserve = vi.fn().mockResolvedValue(true);
+
+      await runSupportAutopilotShadowMain({}, {
+        apiClientFactory: () => availabilityClient({
+          retryAfterMs: 5_000,
+          workAvailable: true,
+          workKind: "revision",
+        }),
+        budget: { release, reserve },
+        loadConfig: () => config,
+        logger: vi.fn(),
+        preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+        secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+        signal: abort.signal,
+        sleep: vi.fn(async () => { abort.abort(); }),
+        worker: {
+          runOne: vi.fn().mockRejectedValue(
+            new CodexShadowWorkerFailure(processInvocationStarted),
+          ),
+        },
+      });
+
+      expect(reserve).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledTimes(expectedReleases);
+    },
+  );
 });

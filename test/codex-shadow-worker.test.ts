@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CodexShadowWorker,
+  CodexShadowWorkerFailure,
   type CodexShadowWorkerEvent,
   type SupportRevisionHostClient,
 } from "../src/runner/codex-shadow-worker.js";
@@ -223,9 +224,9 @@ describe("CodexShadowWorker", () => {
       () => NOW,
     );
 
-    await expect(worker.runOne("revision")).rejects.toThrow(
-      "SUPPORT_AUTOPILOT_CODEX_RUN_FAILED",
-    );
+    const failure = await worker.runOne("revision").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(CodexShadowWorkerFailure);
+    expect(failure).toMatchObject({ processInvocationStarted: false });
     expect(processRunner.run).not.toHaveBeenCalled();
     expect(client.failSupportAutomationRevision).not.toHaveBeenCalled();
   });
@@ -241,5 +242,16 @@ describe("CodexShadowWorker", () => {
     expect(client.claimSupportAutomationRevision).not.toHaveBeenCalled();
     expect(client.renewSupportAutomationRevisionLease).not.toHaveBeenCalled();
     expect(client.failSupportAutomationRevision).not.toHaveBeenCalled();
+  });
+
+  it("marks a process-runner attempt as an invocation even when launch fails", async () => {
+    const processRunner = runner("");
+    processRunner.run.mockRejectedValueOnce(new Error("launch failed"));
+    const worker = new CodexShadowWorker(config, processRunner);
+
+    const failure = await worker.runOne("initial").catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CodexShadowWorkerFailure);
+    expect(failure).toMatchObject({ processInvocationStarted: true });
   });
 });

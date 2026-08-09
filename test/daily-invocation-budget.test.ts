@@ -61,4 +61,24 @@ describe("DailyInvocationBudget", () => {
       invocationCount: 3,
     });
   });
+
+  it("releases one same-day reservation without decrementing a rolled-over date", async () => {
+    const budget = new DailyInvocationBudget(statePath, 2);
+    const firstDay = new Date("2026-08-04T09:00:00.000Z");
+    const nextDay = new Date("2026-08-04T21:30:00.000Z");
+
+    expect(await budget.reserve(firstDay)).toBe(true);
+    await budget.release(firstDay);
+    expect(JSON.parse(await readFile(statePath, "utf8"))).toEqual({
+      date: "2026-08-04",
+      invocationCount: 0,
+    });
+
+    expect(await budget.reserve(nextDay)).toBe(true);
+    await budget.release(firstDay);
+    expect(JSON.parse(await readFile(statePath, "utf8"))).toEqual({
+      date: "2026-08-05",
+      invocationCount: 1,
+    });
+  });
 });

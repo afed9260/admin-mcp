@@ -3,7 +3,11 @@ import { existsSync } from "node:fs";
 import { SupportAutopilotApiClient } from "../backend/support-autopilot-api-client.js";
 import { SupportAutopilotQueueBridge, type SupportQueueBridgeEvent } from "../bridge/support-autopilot-queue-bridge.js";
 import { CodexShadowPreflight } from "./codex-shadow-preflight.js";
-import { CodexShadowWorker, type CodexShadowWorkerEvent } from "./codex-shadow-worker.js";
+import {
+  CodexShadowWorker,
+  CodexShadowWorkerFailure,
+  type CodexShadowWorkerEvent,
+} from "./codex-shadow-worker.js";
 import type { SupportRevisionHostClient } from "./codex-shadow-worker.js";
 import type { SupportAutomationWorkKind } from "./codex-support-decision-execution.js";
 import { SpawnCodexProcessRunner } from "./codex-process-runner.js";
@@ -28,7 +32,7 @@ export type SupportAutopilotShadowMainEvent =
 
 export interface SupportAutopilotShadowMainDependencies {
   apiClientFactory?: (config: EnabledConfig, token: string) => ApiClient;
-  budget?: Pick<DailyInvocationBudget, "reserve">;
+  budget?: Pick<DailyInvocationBudget, "reserve"> & Partial<Pick<DailyInvocationBudget, "release">>;
   drainRequested?: () => boolean;
   loadConfig?: (environment: Record<string, string | undefined>) => SupportAutopilotShadowRunnerConfig;
   logger?: (event: SupportAutopilotShadowMainEvent) => void;
@@ -95,7 +99,8 @@ export async function runSupportAutopilotShadowMain(
       },
       {
         runOne: async () => {
-          if (!await budget.reserve()) {
+          const reservationTime = new Date();
+          if (!await budget.reserve(reservationTime)) {
             log(logger, { eventCode: "shadow_daily_budget_exhausted" });
             throw new Error("daily budget exhausted");
           }
@@ -104,7 +109,18 @@ export async function runSupportAutopilotShadowMain(
           }
           const selectedWorkKind = pendingWorkKind;
           pendingWorkKind = null;
-          await worker.runOne(selectedWorkKind);
+          try {
+            await worker.runOne(selectedWorkKind);
+          } catch (error: unknown) {
+            if (
+              error instanceof CodexShadowWorkerFailure
+              && !error.processInvocationStarted
+              && budget.release !== undefined
+            ) {
+              await budget.release(reservationTime).catch(() => undefined);
+            }
+            throw error;
+          }
         },
       },
       { logger: (event) => log(logger, event), shouldStop: drainRequested },

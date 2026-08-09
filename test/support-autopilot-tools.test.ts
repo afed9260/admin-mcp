@@ -5,12 +5,100 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SupportAutopilotApiClient } from "../src/backend/support-autopilot-api-client.js";
 import {
+  initialSupportAutopilotToolNames,
   registerSupportAutopilotTools,
+  revisionSupportAutopilotToolNames,
   supportAutopilotToolNames,
 } from "../src/tools/support-autopilot-tools.js";
+import type { SupportAutomationWorkKind } from "../src/runner/codex-support-decision-execution.js";
 
 const servers: McpServer[] = [];
 const clients: Client[] = [];
+const REVISION_JOB_ID = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+const LATEST_MESSAGE_ID = "6cc98548-b99e-4e93-93ed-7281499fc4c7";
+
+function validRevisionContext() {
+  const evidenceBase = {
+    contractVersion: "v1",
+    expiresAt: "2026-08-09T10:05:00.000Z",
+    observedAt: "2026-08-09T10:00:00.000Z",
+    sensitivityClass: "support_internal",
+    sourceEndpoint: "/support-agent/internal/automation/revisions/context",
+    sourceService: "support_automation",
+    subjectId: "7cc98548-b99e-4e93-93ed-7281499fc4c7",
+    subjectType: "ticket",
+    valueHash: `sha256:${"a".repeat(64)}`,
+    volatility: "volatile",
+  };
+  return {
+    currentContext: {
+      attachments: [],
+      contextTruncated: false,
+      currentTicket: {
+        aiState: "analyzing",
+        automationVersion: 7,
+        category: "technical_bug",
+        latestMessageId: LATEST_MESSAGE_ID,
+        previousTicketsCount: 1,
+        priority: "P3",
+        status: "needs_support_reply",
+        subject: "Bot does not answer",
+      },
+      customerAlias: `customer_${"b".repeat(24)}`,
+      customerDeliveryEnabled: false,
+      diagnosticCapabilities: [],
+      evidenceFacts: [
+        {
+          ...evidenceBase,
+          factKey: "ticket.state",
+          normalizedValue: {
+            aiState: "analyzing",
+            automationVersion: 7,
+            category: "technical_bug",
+            priority: "P3",
+            status: "needs_support_reply",
+          },
+        },
+        {
+          ...evidenceBase,
+          factKey: "ticket.latest_message",
+          normalizedValue: {
+            authorType: "customer",
+            createdAt: "2026-08-09T09:59:00.000Z",
+            direction: "inbound",
+            latestMessageId: LATEST_MESSAGE_ID,
+          },
+        },
+      ],
+      messages: [{
+        authorType: "customer",
+        createdAt: "2026-08-09T09:59:00.000Z",
+        direction: "inbound",
+        messageId: LATEST_MESSAGE_ID,
+        text: "Synthetic support question",
+        textTruncated: false,
+      }],
+    },
+    customerAction: "none",
+    fences: {
+      expectedLatestMessageId: LATEST_MESSAGE_ID,
+      expectedTicketVersion: 7,
+    },
+    mode: "revision",
+    priorDraft: {
+      decisionType: "request_information",
+      proposedReply: "Please provide the listing identifier.",
+      selectedPolicyId: "request_missing_reference.v1",
+    },
+    revisionJobId: REVISION_JOB_ID,
+    revisionRequest: {
+      factKey: "owner_requested_revision",
+      requestedAt: "2026-08-09T09:58:00.000Z",
+      sequence: 1,
+    },
+    ticketMutation: false,
+  };
+}
 
 afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
@@ -18,9 +106,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function connect(client: Partial<SupportAutopilotApiClient>) {
+async function connect(
+  client: Partial<SupportAutopilotApiClient>,
+  workKind?: SupportAutomationWorkKind,
+) {
   const server = new McpServer({ name: "support-autopilot-test", version: "0.0.0" });
-  registerSupportAutopilotTools(server, client as SupportAutopilotApiClient);
+  registerSupportAutopilotTools(server, client as SupportAutopilotApiClient, workKind);
 
   const mcpClient = new Client({ name: "support-autopilot-test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -31,6 +122,21 @@ async function connect(client: Partial<SupportAutopilotApiClient>) {
 }
 
 describe("registerSupportAutopilotTools", () => {
+  it("exposes only the tools required by the backend-selected work kind", async () => {
+    const backend = { get: vi.fn(), post: vi.fn() };
+    const initialClient = await connect(backend, "initial");
+    const revisionClient = await connect(backend, "revision");
+
+    expect((await initialClient.listTools()).tools.map((tool) => tool.name))
+      .toEqual(initialSupportAutopilotToolNames);
+    expect((await revisionClient.listTools()).tools.map((tool) => tool.name))
+      .toEqual(revisionSupportAutopilotToolNames);
+    expect(revisionSupportAutopilotToolNames).toEqual([
+      "get_support_automation_revision_context",
+      "submit_support_automation_revision",
+    ]);
+  });
+
   it("registers exactly the restricted queue tools with correct annotations", async () => {
     const client = await connect({ get: vi.fn(), post: vi.fn() });
     const { tools } = await client.listTools();
@@ -212,10 +318,27 @@ describe("registerSupportAutopilotTools", () => {
   });
 
   it("exposes four strict revision tools while failure remains host-only", async () => {
-    const claimSupportAutomationRevision = vi.fn().mockResolvedValue({ revisionJobId: "id" });
-    const renewSupportAutomationRevisionLease = vi.fn().mockResolvedValue({ leaseToken: "B".repeat(43) });
-    const getSupportAutomationRevisionContext = vi.fn().mockResolvedValue({ mode: "revision" });
-    const submitSupportAutomationRevision = vi.fn().mockResolvedValue({ outcome: "revision_recorded" });
+    const claimSupportAutomationRevision = vi.fn().mockResolvedValue({
+      attemptCount: 1,
+      leaseExpiresAt: "2026-08-09T10:02:00.000Z",
+      leaseToken: "A".repeat(43),
+      revisionJobId: REVISION_JOB_ID,
+      sequence: 1,
+    });
+    const renewSupportAutomationRevisionLease = vi.fn().mockResolvedValue({
+      leaseExpiresAt: "2026-08-09T10:02:00.000Z",
+      leaseToken: "B".repeat(43),
+      revisionJobId: REVISION_JOB_ID,
+    });
+    const getSupportAutomationRevisionContext = vi.fn().mockResolvedValue(
+      validRevisionContext(),
+    );
+    const submitSupportAutomationRevision = vi.fn().mockResolvedValue({
+      customerAction: "none",
+      outcome: "revision_recorded",
+      revisionStatus: "completed",
+      ticketMutation: false,
+    });
     const client = await connect({
       get: vi.fn(),
       post: vi.fn(),
@@ -225,24 +348,24 @@ describe("registerSupportAutopilotTools", () => {
       submitSupportAutomationRevision,
     });
     const lease = {
-      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      revisionJobId: REVISION_JOB_ID,
       leaseToken: "A".repeat(43),
       workerId: "support-worker.1",
     };
 
-    await client.callTool({
+    const claimResult = await client.callTool({
       name: "claim_support_automation_revision",
       arguments: { workerId: lease.workerId },
     });
-    await client.callTool({
+    const renewResult = await client.callTool({
       name: "renew_support_automation_revision_lease",
       arguments: lease,
     });
-    await client.callTool({
+    const contextResult = await client.callTool({
       name: "get_support_automation_revision_context",
       arguments: lease,
     });
-    await client.callTool({
+    const submitResult = await client.callTool({
       name: "submit_support_automation_revision",
       arguments: {
         ...lease,
@@ -265,6 +388,96 @@ describe("registerSupportAutopilotTools", () => {
       ...lease,
       proposedReply: "Уточните, пожалуйста, номер объявления.",
     }));
+    for (const result of [claimResult, renewResult, contextResult, submitResult]) {
+      expect(result.isError).not.toBe(true);
+    }
+  });
+
+  it("rejects an unexpected secret-bearing revision context response", async () => {
+    const rawCredential = "raw-provider-credential";
+    const client = await connect({
+      get: vi.fn(),
+      post: vi.fn(),
+      getSupportAutomationRevisionContext: vi.fn().mockResolvedValue({
+        mode: "revision",
+        rawCredential,
+      }),
+    });
+
+    const result = await client.callTool({
+      name: "get_support_automation_revision_context",
+      arguments: {
+        revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+        leaseToken: "A".repeat(43),
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(rawCredential);
+  });
+
+  it.each([
+    [
+      "claimSupportAutomationRevision",
+      "claim_support_automation_revision",
+      { workerId: "support-worker.1" },
+      {
+        attemptCount: 1,
+        leaseExpiresAt: "2026-08-09T10:02:00.000Z",
+        leaseToken: "A".repeat(43),
+        revisionJobId: REVISION_JOB_ID,
+        sequence: 1,
+      },
+    ],
+    [
+      "renewSupportAutomationRevisionLease",
+      "renew_support_automation_revision_lease",
+      {
+        leaseToken: "A".repeat(43),
+        revisionJobId: REVISION_JOB_ID,
+        workerId: "support-worker.1",
+      },
+      {
+        leaseExpiresAt: "2026-08-09T10:02:00.000Z",
+        leaseToken: "B".repeat(43),
+        revisionJobId: REVISION_JOB_ID,
+      },
+    ],
+    [
+      "submitSupportAutomationRevision",
+      "submit_support_automation_revision",
+      {
+        decisionType: "request_information",
+        evidenceFactKeys: ["ticket.state", "ticket.latest_message"],
+        expectedLatestMessageId: LATEST_MESSAGE_ID,
+        expectedTicketVersion: 7,
+        internalReasoning: "One clarification is required.",
+        leaseToken: "A".repeat(43),
+        proposedReply: "Please provide the listing identifier.",
+        revisionJobId: REVISION_JOB_ID,
+        selectedPolicyId: "request_missing_reference.v1",
+        workerId: "support-worker.1",
+      },
+      {
+        customerAction: "none",
+        outcome: "revision_recorded",
+        revisionStatus: "completed",
+        ticketMutation: false,
+      },
+    ],
+  ])("rejects secret-bearing output from %s", async (method, name, args, response) => {
+    const rawCredential = "raw-provider-credential";
+    const client = await connect({
+      get: vi.fn(),
+      post: vi.fn(),
+      [method]: vi.fn().mockResolvedValue({ ...response, rawCredential }),
+    } as Partial<SupportAutopilotApiClient>);
+
+    const result = await client.callTool({ name, arguments: args });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(rawCredential);
   });
 
   it.each([
