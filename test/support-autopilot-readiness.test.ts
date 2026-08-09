@@ -63,7 +63,7 @@ describe("SupportAutopilotReadinessDoctor", () => {
           ADMIN_API_BASE_URL: "https://admin.example.test/new-admin",
           SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: config.credentialBlobPath,
         },
-        env_vars: [],
+        env_vars: ["SUPPORT_AUTOPILOT_WORK_KIND"],
         type: "stdio",
       },
     }]);

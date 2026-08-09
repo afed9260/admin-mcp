@@ -43,7 +43,9 @@ export function assertSupportAutopilotMcpProfile(
       || !sameWindowsPath(transport.args[0], expected.mcpEntryPath)
       || !(transport.cwd === null || transport.cwd === undefined)
       || !matchesEnvironment(transport.env, expected.environment)
-      || !(transport.env_vars === undefined || (Array.isArray(transport.env_vars) && transport.env_vars.length === 0))
+      || !Array.isArray(transport.env_vars)
+      || transport.env_vars.length !== 1
+      || transport.env_vars[0] !== "SUPPORT_AUTOPILOT_WORK_KIND"
     ) {
       throw new Error("invalid profile");
     }

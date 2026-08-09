@@ -71,4 +71,19 @@ describe("launchSupportAutopilotMcp", () => {
     expect(read).not.toHaveBeenCalled();
     expect(spawn).not.toHaveBeenCalled();
   });
+
+  it("rejects a missing work kind before decryption or spawn", async () => {
+    const spawn = vi.fn();
+    const read = vi.fn();
+
+    await expect(launchSupportAutopilotMcp({
+      ADMIN_API_BASE_URL: "https://admin.example.test",
+      SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: "C:\\Secrets\\token.dpapi",
+    }, {
+      secretProvider: { read },
+      spawn,
+    })).rejects.toThrow("SUPPORT_AUTOPILOT_MCP_LAUNCH_FAILED");
+    expect(read).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+  });
 });

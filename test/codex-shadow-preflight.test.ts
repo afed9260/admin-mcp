@@ -69,7 +69,7 @@ describe("CodexShadowPreflight", () => {
           ADMIN_API_BASE_URL: config.adminApiBaseUrl,
           SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH: config.credentialBlobPath,
         },
-        env_vars: [],
+        env_vars: ["SUPPORT_AUTOPILOT_WORK_KIND"],
         type: "stdio",
       },
     }]);
@@ -138,6 +138,7 @@ describe("CodexShadowPreflight", () => {
       "read-only",
     ]));
     expect(smoke.stdin).toContain("get_support_automation_health");
+    expect(smoke.environment.SUPPORT_AUTOPILOT_WORK_KIND).toBe("initial");
     expect(JSON.stringify(smoke.environment)).not.toMatch(/service-secret|SUPPORT_AUTOPILOT_SERVICE_TOKEN/);
   });
 

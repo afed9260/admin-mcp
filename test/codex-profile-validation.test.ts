@@ -27,7 +27,7 @@ function profile(transportOverrides: Record<string, unknown> = {}) {
       command: expected.nodeExecutablePath,
       cwd: null,
       env: null,
-      env_vars: [],
+      env_vars: ["SUPPORT_AUTOPILOT_WORK_KIND"],
       type: "stdio",
       ...transportOverrides,
     },
@@ -96,7 +96,11 @@ describe("Codex profile validation", () => {
     ["wrong entry", () => profile({ args: ["C:\\Other\\launcher.js"] })],
     ["working directory", () => profile({ cwd: "C:\\ServiceApp" })],
     ["configured environment", () => profile({ env: { TOKEN: "hidden" } })],
-    ["configured environment variables", () => profile({ env_vars: ["PATH"] })],
+    ["missing work-kind environment allowlist", () => profile({ env_vars: [] })],
+    ["wrong environment allowlist", () => profile({ env_vars: ["PATH"] })],
+    ["extra environment allowlist entry", () => profile({
+      env_vars: ["SUPPORT_AUTOPILOT_WORK_KIND", "PATH"],
+    })],
     ["malformed JSON", () => "not-json"],
   ])("rejects MCP profile with %s", (_name, build) => {
     expect(() => assertSupportAutopilotMcpProfile(build(), expected))

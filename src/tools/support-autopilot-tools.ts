@@ -46,10 +46,7 @@ export type SupportAutopilotToolScope = "initial" | "revision";
 
 export function parseSupportAutopilotToolScope(
   value: string | undefined,
-): SupportAutopilotToolScope | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
+): SupportAutopilotToolScope {
   if (value === "initial" || value === "revision") {
     return value;
   }

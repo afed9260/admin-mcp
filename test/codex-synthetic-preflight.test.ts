@@ -47,6 +47,7 @@ describe("CodexSyntheticPreflight", () => {
         command: config.nodeExecutablePath,
         cwd: null,
         env: null,
+        env_vars: ["SUPPORT_AUTOPILOT_WORK_KIND"],
         type: "stdio",
         ...overrides,
       },
@@ -153,7 +154,8 @@ describe("CodexSyntheticPreflight", () => {
     ["wrong entry", () => mcp({ args: [path.join(root, "other.js")] })],
     ["working directory", () => mcp({ cwd: root })],
     ["configured environment", () => mcp({ env: { SAFE: "still-forbidden" } })],
-    ["configured env vars", () => mcp({ env_vars: ["PATH"] })],
+    ["missing work-kind env var", () => mcp({ env_vars: [] })],
+    ["wrong env var", () => mcp({ env_vars: ["PATH"] })],
   ])("rejects MCP profile with %s", async (_name, buildMcp) => {
     await expect(new CodexSyntheticPreflight(config, runner({ mcp: buildMcp() })).run())
       .rejects.toThrow("SUPPORT_AUTOPILOT_SYNTHETIC_PREFLIGHT_FAILED");
