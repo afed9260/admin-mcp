@@ -241,11 +241,45 @@ const revisionContextResponseSchema = z.object({
   }).strict(),
   ticketMutation: z.literal(false),
 }).strict().superRefine((value, context) => {
-  const factKeys = value.currentContext.evidenceFacts.map((fact) => fact.factKey);
+  const evidenceFacts = value.currentContext.evidenceFacts;
+  const factKeys = evidenceFacts.map((fact) => fact.factKey);
   if (new Set(factKeys).size !== 2) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Revision evidence facts must be unique",
+      path: ["currentContext", "evidenceFacts"],
+    });
+  }
+  if (new Set(evidenceFacts.map((fact) => fact.subjectId)).size !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Revision evidence facts must describe the same ticket",
+      path: ["currentContext", "evidenceFacts"],
+    });
+  }
+  const stateFact = evidenceFacts.find((fact) => fact.factKey === "ticket.state");
+  const latestMessageFact = evidenceFacts.find(
+    (fact) => fact.factKey === "ticket.latest_message",
+  );
+  if (
+    stateFact?.factKey !== "ticket.state"
+    || stateFact.normalizedValue.automationVersion
+      !== value.currentContext.currentTicket.automationVersion
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Revision state evidence does not match the current ticket",
+      path: ["currentContext", "evidenceFacts"],
+    });
+  }
+  if (
+    latestMessageFact?.factKey !== "ticket.latest_message"
+    || latestMessageFact.normalizedValue.latestMessageId
+      !== value.currentContext.currentTicket.latestMessageId
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Revision latest-message evidence does not match the current ticket",
       path: ["currentContext", "evidenceFacts"],
     });
   }

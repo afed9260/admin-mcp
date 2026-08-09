@@ -163,6 +163,7 @@ function hasMatchingTerminalSubmission(
 ): boolean {
   if (workKind === "initial") {
     return summary.successfulInitialDecisionSubmissions === 1
+      && summary.successfulInitialClaims === 1
       && summary.successfulRevisionSubmissions === 0
       && summary.successfulRevisionClaims === 0
       && summary.successfulRevisionLeaseRenewals === 0;

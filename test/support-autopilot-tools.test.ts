@@ -418,6 +418,49 @@ describe("registerSupportAutopilotTools", () => {
   });
 
   it.each([
+    ["different evidence subjects", (context: ReturnType<typeof validRevisionContext>) => {
+      context.currentContext.evidenceFacts[1].subjectId =
+        "8cc98548-b99e-4e93-93ed-7281499fc4c7";
+    }],
+    ["stale state version", (context: ReturnType<typeof validRevisionContext>) => {
+      const state = context.currentContext.evidenceFacts.find(
+        (fact) => fact.factKey === "ticket.state",
+      );
+      if (state?.factKey === "ticket.state") {
+        state.normalizedValue.automationVersion = 6;
+      }
+    }],
+    ["different latest message", (context: ReturnType<typeof validRevisionContext>) => {
+      const latest = context.currentContext.evidenceFacts.find(
+        (fact) => fact.factKey === "ticket.latest_message",
+      );
+      if (latest?.factKey === "ticket.latest_message") {
+        latest.normalizedValue.latestMessageId =
+          "9cc98548-b99e-4e93-93ed-7281499fc4c7";
+      }
+    }],
+  ])("rejects revision context with %s", async (_name, mutate) => {
+    const context = validRevisionContext();
+    mutate(context);
+    const client = await connect({
+      get: vi.fn(),
+      post: vi.fn(),
+      getSupportAutomationRevisionContext: vi.fn().mockResolvedValue(context),
+    });
+
+    const result = await client.callTool({
+      name: "get_support_automation_revision_context",
+      arguments: {
+        revisionJobId: REVISION_JOB_ID,
+        leaseToken: "A".repeat(43),
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+  });
+
+  it.each([
     [
       "claimSupportAutomationRevision",
       "claim_support_automation_revision",

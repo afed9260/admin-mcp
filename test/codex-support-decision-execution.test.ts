@@ -139,6 +139,7 @@ describe("runCodexSupportDecision", () => {
 
   it("accepts at most two failed calls when Codex recovers and submits exactly one decision", async () => {
     const processRunner = runner([
+      toolEvent("claim_support_automation_job"),
       toolEvent("submit_support_automation_decision", "failed"),
       toolEvent("submit_support_automation_decision"),
       "",
@@ -147,7 +148,7 @@ describe("runCodexSupportDecision", () => {
     await expect(runCodexSupportDecision(executionConfig(), processRunner)).resolves.toMatchObject({
       failedToolCalls: 1,
       successfulDecisionSubmissions: 1,
-      toolCalls: 2,
+      toolCalls: 3,
     });
   });
 
@@ -165,6 +166,13 @@ describe("runCodexSupportDecision", () => {
 
   it.each([
     ["missing decision", `${toolEvent("claim_support_automation_job")}\n`, {}],
+    ["decision without a claim", `${toolEvent("submit_support_automation_decision")}\n`, {}],
+    ["multiple initial claims", [
+      toolEvent("claim_support_automation_job"),
+      toolEvent("claim_support_automation_job"),
+      toolEvent("submit_support_automation_decision"),
+      "",
+    ].join("\n"), {}],
     ["two decisions", `${toolEvent("submit_support_automation_decision")}\n${toolEvent("submit_support_automation_decision")}\n`, {}],
     ["failed tool", `${toolEvent("submit_support_automation_decision", "failed", { message: "synthetic failure" })}\n`, {}],
     ["nonzero exit", `${toolEvent("submit_support_automation_decision")}\n`, { exitCode: 1 }],

@@ -94,6 +94,7 @@ describe("CodexShadowWorker", () => {
 
   it("reports a bounded recovered tool failure without relabeling the recorded decision as failed", async () => {
     const processRunner = runner([
+      toolEvent("claim_support_automation_job"),
       toolEvent("submit_support_automation_decision", "failed"),
       toolEvent("submit_support_automation_decision"),
       "",
@@ -104,7 +105,7 @@ describe("CodexShadowWorker", () => {
     await expect(worker.runOne()).resolves.toEqual({
       failedToolCalls: 1,
       successfulDecisionSubmissions: 1,
-      toolCalls: 2,
+      toolCalls: 3,
     });
     expect(events).toContainEqual(expect.objectContaining({
       eventCode: "codex_shadow_run_completed",
