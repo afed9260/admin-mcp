@@ -2,7 +2,12 @@ import { StringDecoder } from "node:string_decoder";
 
 export interface CodexJsonlSummary {
   failedToolCalls: number;
+  successfulInitialClaims: number;
   successfulDecisionSubmissions: number;
+  successfulInitialDecisionSubmissions: number;
+  successfulRevisionClaims: number;
+  successfulRevisionLeaseRenewals: number;
+  successfulRevisionSubmissions: number;
   toolCalls: number;
   totalLines: number;
 }
@@ -23,7 +28,12 @@ export class CodexJsonlObserver {
   private finished = false;
   private summary: CodexJsonlSummary = {
     failedToolCalls: 0,
+    successfulInitialClaims: 0,
     successfulDecisionSubmissions: 0,
+    successfulInitialDecisionSubmissions: 0,
+    successfulRevisionClaims: 0,
+    successfulRevisionLeaseRenewals: 0,
+    successfulRevisionSubmissions: 0,
     toolCalls: 0,
     totalLines: 0,
   };
@@ -115,6 +125,20 @@ export class CodexJsonlObserver {
       item.server === "support-autopilot"
       && item.tool === "submit_support_automation_decision"
     ) {
+      this.summary.successfulInitialDecisionSubmissions += 1;
+      this.summary.successfulDecisionSubmissions += 1;
+    }
+    if (item.server !== "support-autopilot") {
+      return;
+    }
+    if (item.tool === "claim_support_automation_job") {
+      this.summary.successfulInitialClaims += 1;
+    } else if (item.tool === "claim_support_automation_revision") {
+      this.summary.successfulRevisionClaims += 1;
+    } else if (item.tool === "renew_support_automation_revision_lease") {
+      this.summary.successfulRevisionLeaseRenewals += 1;
+    } else if (item.tool === "submit_support_automation_revision") {
+      this.summary.successfulRevisionSubmissions += 1;
       this.summary.successfulDecisionSubmissions += 1;
     }
   }

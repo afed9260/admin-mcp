@@ -39,4 +39,47 @@ describe("SupportAutopilotApiClient", () => {
     await expect(client.get(path)).rejects.toThrow("Support autopilot endpoint is outside the allowed namespace");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("uses fixed revision endpoints and keeps failure reporting host-only", async () => {
+    const { client, fetchImpl } = createClient();
+    const lease = {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+    };
+
+    await client.claimSupportAutomationRevision({ workerId: lease.workerId });
+    await client.renewSupportAutomationRevisionLease(lease);
+    await client.getSupportAutomationRevisionContext(lease);
+    await client.submitSupportAutomationRevision({
+      ...lease,
+      decisionType: "request_information",
+      evidenceFactKeys: ["ticket.state", "ticket.latest_message"],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "The prior draft needs one precise clarification.",
+      proposedReply: "Уточните, пожалуйста, идентификатор объявления.",
+      selectedPolicyId: "request_missing_reference.v1",
+    });
+    await client.failSupportAutomationRevision({
+      ...lease,
+      failureCode: "runner_timeout",
+    });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://malikbot.ru/new-admin/support-automation/revisions/claim",
+      `https://malikbot.ru/new-admin/support-automation/revisions/${lease.revisionJobId}/lease/renew`,
+      `https://malikbot.ru/new-admin/support-automation/revisions/${lease.revisionJobId}/context`,
+      `https://malikbot.ru/new-admin/support-automation/revisions/${lease.revisionJobId}/decision`,
+      `https://malikbot.ru/new-admin/support-automation/revisions/${lease.revisionJobId}/failure`,
+    ]);
+    expect(fetchImpl.mock.calls[4]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        leaseToken: lease.leaseToken,
+        workerId: lease.workerId,
+        failureCode: "runner_timeout",
+      }),
+      method: "POST",
+    });
+  });
 });

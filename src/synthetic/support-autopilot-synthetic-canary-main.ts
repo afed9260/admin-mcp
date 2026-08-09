@@ -68,6 +68,7 @@ export async function runSupportAutopilotSyntheticCanary(
       processTimeoutMs: config.processTimeoutMs,
       runtimeDir: config.runtimeDir,
       workerId: config.workerId,
+      workKind: "initial",
     }, processRunner);
     const durationMs = Math.max(0, Math.round(clock() - startedAt));
 

@@ -50,6 +50,15 @@ describe("registerSupportAutopilotTools", () => {
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
     expect(tools.find((tool) => tool.name === "submit_support_automation_decision")?.annotations)
       .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "claim_support_automation_revision")?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "renew_support_automation_revision_lease")?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "get_support_automation_revision_context")?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
+    expect(tools.find((tool) => tool.name === "submit_support_automation_revision")?.annotations)
+      .toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.map((tool) => tool.name)).not.toContain("fail_support_automation_revision");
     const decisionDescription = tools.find(
       (tool) => tool.name === "submit_support_automation_decision",
     )?.description;
@@ -202,6 +211,62 @@ describe("registerSupportAutopilotTools", () => {
     expect(post).toHaveBeenCalledWith(`/support-automation/jobs/${jobId}/decision`, body);
   });
 
+  it("exposes four strict revision tools while failure remains host-only", async () => {
+    const claimSupportAutomationRevision = vi.fn().mockResolvedValue({ revisionJobId: "id" });
+    const renewSupportAutomationRevisionLease = vi.fn().mockResolvedValue({ leaseToken: "B".repeat(43) });
+    const getSupportAutomationRevisionContext = vi.fn().mockResolvedValue({ mode: "revision" });
+    const submitSupportAutomationRevision = vi.fn().mockResolvedValue({ outcome: "revision_recorded" });
+    const client = await connect({
+      get: vi.fn(),
+      post: vi.fn(),
+      claimSupportAutomationRevision,
+      renewSupportAutomationRevisionLease,
+      getSupportAutomationRevisionContext,
+      submitSupportAutomationRevision,
+    });
+    const lease = {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+    };
+
+    await client.callTool({
+      name: "claim_support_automation_revision",
+      arguments: { workerId: lease.workerId },
+    });
+    await client.callTool({
+      name: "renew_support_automation_revision_lease",
+      arguments: lease,
+    });
+    await client.callTool({
+      name: "get_support_automation_revision_context",
+      arguments: lease,
+    });
+    await client.callTool({
+      name: "submit_support_automation_revision",
+      arguments: {
+        ...lease,
+        decisionType: "request_information",
+        evidenceFactKeys: ["ticket.state", "ticket.latest_message"],
+        expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+        expectedTicketVersion: 7,
+        internalReasoning: "The prior draft needs one clarification.",
+        proposedReply: "Уточните, пожалуйста, номер объявления.",
+        selectedPolicyId: "request_missing_reference.v1",
+      },
+    });
+
+    expect(claimSupportAutomationRevision).toHaveBeenCalledWith({
+      workerId: lease.workerId,
+    });
+    expect(renewSupportAutomationRevisionLease).toHaveBeenCalledWith(lease);
+    expect(getSupportAutomationRevisionContext).toHaveBeenCalledWith(lease);
+    expect(submitSupportAutomationRevision).toHaveBeenCalledWith(expect.objectContaining({
+      ...lease,
+      proposedReply: "Уточните, пожалуйста, номер объявления.",
+    }));
+  });
+
   it.each([
     ["get_support_automation_work_availability", {}],
     ["get_support_automation_work_availability", { workerId: "support-worker.1", unexpected: true }],
@@ -247,6 +312,41 @@ describe("registerSupportAutopilotTools", () => {
       jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
       leaseToken: "short",
       workerId: "support-worker.1",
+    }],
+    ["claim_support_automation_revision", {
+      workerId: "support-worker.1",
+      ticketMutation: false,
+    }],
+    ["renew_support_automation_revision_lease", {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+      customerAction: "none",
+    }],
+    ["submit_support_automation_revision", {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+      decisionType: "escalate",
+      evidenceFactKeys: ["ticket.state"],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "No reply.",
+      proposedReply: "A reply",
+      selectedPolicyId: "unclassified.v1",
+    }],
+    ["submit_support_automation_revision", {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+      workerId: "support-worker.1",
+      decisionType: "auto_reply",
+      evidenceFactKeys: ["ticket.state"],
+      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      expectedTicketVersion: 7,
+      internalReasoning: "Known policy.",
+      proposedReply: "A reply",
+      selectedPolicyId: "kb_instruction.v1",
+      executionAuthorized: false,
     }],
   ])("rejects invalid input for %s before backend IO", async (name, args) => {
     const get = vi.fn();

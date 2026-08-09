@@ -174,6 +174,7 @@ describe("createAdminMcpServer", () => {
 
     const toolNames = (await client.listTools()).tools.map((tool) => tool.name);
     expect(toolNames).toEqual(supportAutopilotToolNames);
+    expect(toolNames).not.toContain("fail_support_automation_revision");
     expect(toolNames).not.toEqual(expect.arrayContaining([
       ...readonlyToolNames,
       ...safeAutomationToolNames,

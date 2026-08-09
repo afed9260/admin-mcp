@@ -22,6 +22,18 @@ function runner(stdout: string) {
   return { run } as CodexProcessRunner & { run: typeof run };
 }
 
+function executionConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
+    codexExecutablePath: "C:\\Tools\\codex.exe",
+    processTimeoutMs: 120_000,
+    runtimeDir: "C:\\Synthetic\\runtime",
+    workerId: "support-synthetic.1",
+    workKind: "initial" as const,
+    ...overrides,
+  };
+}
+
 describe("runCodexSupportDecision", () => {
   it.each([
     ["missing decision", `${toolEvent("claim_support_automation_job")}\n`, {}, "decision_count_invalid"],
@@ -45,13 +57,10 @@ describe("runCodexSupportDecision", () => {
       ...override,
     });
 
-    const failure = await runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner).catch((error: unknown) => error);
+    const failure = await runCodexSupportDecision(
+      executionConfig(),
+      processRunner,
+    ).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(CodexSupportDecisionError);
     expect(failure).toMatchObject({ stage });
@@ -62,13 +71,10 @@ describe("runCodexSupportDecision", () => {
     const processRunner = runner("");
     processRunner.run.mockRejectedValueOnce(new Error("process secret"));
 
-    const failure = await runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner).catch((error: unknown) => error);
+    const failure = await runCodexSupportDecision(
+      executionConfig(),
+      processRunner,
+    ).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(CodexSupportDecisionError);
     expect(failure).toMatchObject({ stage: "process_launch_failed" });
@@ -82,15 +88,14 @@ describe("runCodexSupportDecision", () => {
       "",
     ].join("\n"));
 
-    await expect(runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner)).resolves.toEqual({
+    await expect(runCodexSupportDecision(executionConfig(), processRunner)).resolves.toEqual({
       failedToolCalls: 0,
+      successfulInitialClaims: 1,
       successfulDecisionSubmissions: 1,
+      successfulInitialDecisionSubmissions: 1,
+      successfulRevisionClaims: 0,
+      successfulRevisionLeaseRenewals: 0,
+      successfulRevisionSubmissions: 0,
       toolCalls: 2,
       totalLines: 2,
     });
@@ -122,13 +127,7 @@ describe("runCodexSupportDecision", () => {
       "",
     ].join("\n"));
 
-    await expect(runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner)).resolves.toMatchObject({
+    await expect(runCodexSupportDecision(executionConfig(), processRunner)).resolves.toMatchObject({
       failedToolCalls: 1,
       successfulDecisionSubmissions: 1,
       toolCalls: 2,
@@ -144,13 +143,7 @@ describe("runCodexSupportDecision", () => {
       "",
     ].join("\n"));
 
-    await expect(runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner)).rejects.toThrow();
+    await expect(runCodexSupportDecision(executionConfig(), processRunner)).rejects.toThrow();
   });
 
   it.each([
@@ -169,12 +162,45 @@ describe("runCodexSupportDecision", () => {
       ...override,
     });
 
-    await expect(runCodexSupportDecision({
-      childEnvironment: { CODEX_HOME: "C:\\Synthetic\\codex-home" },
-      codexExecutablePath: "C:\\Tools\\codex.exe",
-      processTimeoutMs: 120_000,
-      runtimeDir: "C:\\Synthetic\\runtime",
-      workerId: "support-synthetic.1",
-    }, processRunner)).rejects.toThrow();
+    await expect(runCodexSupportDecision(executionConfig(), processRunner)).rejects.toThrow();
+  });
+
+  it("accepts one assigned revision submit and rejects mixed or model-rotated flows", async () => {
+    const assignedRevision = {
+      revisionJobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      leaseToken: "A".repeat(43),
+    };
+    const validRunner = runner(`${toolEvent("submit_support_automation_revision")}\n`);
+
+    await expect(runCodexSupportDecision(executionConfig({
+      assignedRevision,
+      workKind: "revision",
+    }), validRunner)).resolves.toMatchObject({
+      successfulInitialDecisionSubmissions: 0,
+      successfulRevisionSubmissions: 1,
+    });
+    const prompt = (validRunner.run.mock.calls[0][0] as CodexProcessInput).stdin ?? "";
+    expect(prompt).toContain(assignedRevision.revisionJobId);
+    expect(prompt).toContain(assignedRevision.leaseToken);
+    expect(prompt).toContain("priorDraft");
+    expect(prompt).toContain("executionAuthorized=false");
+    expect(prompt).not.toContain(
+      "Call submit_support_automation_decision with all schema fields",
+    );
+    expect(prompt).toContain(
+      "Call submit_support_automation_revision with all schema fields",
+    );
+
+    for (const output of [
+      `${toolEvent("submit_support_automation_decision")}\n`,
+      `${toolEvent("submit_support_automation_revision")}\n${toolEvent("submit_support_automation_decision")}\n`,
+      `${toolEvent("claim_support_automation_revision")}\n${toolEvent("submit_support_automation_revision")}\n`,
+      `${toolEvent("renew_support_automation_revision_lease")}\n${toolEvent("submit_support_automation_revision")}\n`,
+    ]) {
+      await expect(runCodexSupportDecision(executionConfig({
+        assignedRevision,
+        workKind: "revision",
+      }), runner(output))).rejects.toMatchObject({ stage: "decision_count_invalid" });
+    }
   });
 });

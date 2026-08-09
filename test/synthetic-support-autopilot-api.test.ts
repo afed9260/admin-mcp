@@ -41,7 +41,7 @@ describe("SyntheticSupportAutopilotApi", () => {
     const api = new SyntheticSupportAutopilotApi();
 
     await expect(api.post("/support-automation/work-availability", { workerId }))
-      .resolves.toEqual({ retryAfterMs: 5_000, workAvailable: true });
+      .resolves.toEqual({ retryAfterMs: 5_000, workAvailable: true, workKind: "initial" });
     await expect(api.post("/support-automation/jobs/claim", { workerId }))
       .resolves.toMatchObject({ jobId: SYNTHETIC_JOB_ID, leaseToken: SYNTHETIC_LEASE_TOKEN });
     await expect(api.post(`/support-automation/jobs/${SYNTHETIC_JOB_ID}/context`, leaseBody()))
@@ -69,7 +69,7 @@ describe("SyntheticSupportAutopilotApi", () => {
       synthetic: true,
     });
     await expect(api.post("/support-automation/work-availability", { workerId }))
-      .resolves.toEqual({ retryAfterMs: 5_000, workAvailable: false });
+      .resolves.toEqual({ retryAfterMs: 5_000, workAvailable: false, workKind: null });
   });
 
   it("rotates the lease once and rejects the previous token", async () => {
@@ -120,6 +120,8 @@ describe("SyntheticSupportAutopilotApi", () => {
       leaseBody(),
     )).rejects.toThrow("SYNTHETIC_SUPPORT_AUTOPILOT_INVALID");
     await expect(api.get("/support-automation/unknown"))
+      .rejects.toThrow("SYNTHETIC_SUPPORT_AUTOPILOT_INVALID");
+    await expect(api.claimSupportAutomationRevision({ workerId }))
       .rejects.toThrow("SYNTHETIC_SUPPORT_AUTOPILOT_INVALID");
   });
 

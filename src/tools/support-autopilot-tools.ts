@@ -1,10 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type {
+  SupportAutomationRevisionDecisionInput,
+  SupportAutomationRevisionLeaseIdentity,
+  SupportAutomationWorkerIdentity,
+} from "../backend/support-autopilot-api-client.js";
 
 export interface SupportAutopilotClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
+  claimSupportAutomationRevision(input: SupportAutomationWorkerIdentity): Promise<unknown>;
+  renewSupportAutomationRevisionLease(input: SupportAutomationRevisionLeaseIdentity): Promise<unknown>;
+  getSupportAutomationRevisionContext(input: SupportAutomationRevisionLeaseIdentity): Promise<unknown>;
+  submitSupportAutomationRevision(input: SupportAutomationRevisionDecisionInput): Promise<unknown>;
 }
 
 export const supportAutopilotToolNames = [
@@ -15,6 +24,10 @@ export const supportAutopilotToolNames = [
   "get_support_automation_attachment",
   "submit_support_automation_decision",
   "get_support_automation_health",
+  "claim_support_automation_revision",
+  "renew_support_automation_revision_lease",
+  "get_support_automation_revision_context",
+  "submit_support_automation_revision",
 ] as const;
 
 const workerIdSchema = z.string().regex(/^[a-z0-9](?:[a-z0-9._:-]{1,62}[a-z0-9])$/);
@@ -49,6 +62,11 @@ const leaseIdentitySchema = z.object({
   leaseToken: leaseTokenSchema,
   workerId: workerIdSchema,
 }).strict();
+const revisionLeaseIdentitySchema = z.object({
+  revisionJobId: jobIdSchema,
+  leaseToken: leaseTokenSchema,
+  workerId: workerIdSchema,
+}).strict();
 const attachmentInputSchema = leaseIdentitySchema.extend({
   attachmentRef: attachmentRefSchema,
 }).strict();
@@ -72,6 +90,22 @@ const decisionInputSchema = leaseIdentitySchema.extend({
     });
   }
 });
+const revisionDecisionInputSchema = revisionLeaseIdentitySchema.extend({
+  decisionType: z.enum([
+    "auto_reply",
+    "request_information",
+    "auto_reply_and_escalate",
+  ]),
+  evidenceFactKeys: z.array(z.enum(["ticket.state", "ticket.latest_message"]))
+    .min(1)
+    .max(2)
+    .refine((keys) => new Set(keys).size === keys.length, "Evidence keys must be unique"),
+  expectedLatestMessageId: latestMessageIdSchema,
+  expectedTicketVersion: z.number().int().nonnegative().safe(),
+  internalReasoning: boundedUtf8(2_000),
+  proposedReply: boundedUtf8(4_000),
+  selectedPolicyId: policyIdSchema,
+}).strict();
 const attachmentResponseSchema = z.object({
   dataBase64: z.string().min(1).max(Math.ceil((8 * 1024 * 1024) / 3) * 4),
   metadata: z.object({
@@ -228,5 +262,48 @@ export function registerSupportAutopilotTools(
       annotations: readOnlyAnnotations,
     },
     async () => toolResponse(await client.get("/support-automation/health")),
+  );
+
+  server.registerTool(
+    "claim_support_automation_revision",
+    {
+      description: "Claim one immutable support reply revision using a bounded lease.",
+      inputSchema: claimInputSchema,
+      annotations: queueMutationAnnotations,
+    },
+    async (input) => toolResponse(await client.claimSupportAutomationRevision(input)),
+  );
+
+  server.registerTool(
+    "renew_support_automation_revision_lease",
+    {
+      description: "Renew the current support revision lease and rotate its one-time token.",
+      inputSchema: revisionLeaseIdentitySchema,
+      annotations: queueMutationAnnotations,
+    },
+    async (input) => toolResponse(await client.renewSupportAutomationRevisionLease(input)),
+  );
+
+  server.registerTool(
+    "get_support_automation_revision_context",
+    {
+      description: "Read canonical private context for the current leased support revision.",
+      inputSchema: revisionLeaseIdentitySchema,
+      annotations: readOnlyAnnotations,
+    },
+    async (input) => toolResponse(await client.getSupportAutomationRevisionContext(input)),
+  );
+
+  server.registerTool(
+    "submit_support_automation_revision",
+    {
+      description: [
+        "Record one revised support draft without customer action or ticket mutation.",
+        "Pass exactly the revision lease, fences, evidence, reasoning, policy, decision type, and non-empty proposed reply.",
+      ].join(" "),
+      inputSchema: revisionDecisionInputSchema,
+      annotations: queueMutationAnnotations,
+    },
+    async (input) => toolResponse(await client.submitSupportAutomationRevision(input)),
   );
 }
