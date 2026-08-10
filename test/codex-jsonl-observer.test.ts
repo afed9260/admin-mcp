@@ -36,7 +36,12 @@ describe("CodexJsonlObserver", () => {
 
     expect(observer.finish()).toEqual({
       failedToolCalls: 0,
+      successfulInitialClaims: 0,
       successfulDecisionSubmissions: 1,
+      successfulInitialDecisionSubmissions: 1,
+      successfulRevisionClaims: 0,
+      successfulRevisionLeaseRenewals: 0,
+      successfulRevisionSubmissions: 0,
       toolCalls: 1,
       totalLines: 1,
     });
@@ -48,7 +53,12 @@ describe("CodexJsonlObserver", () => {
 
     expect(observer.finish()).toEqual({
       failedToolCalls: 0,
+      successfulInitialClaims: 0,
       successfulDecisionSubmissions: 1,
+      successfulInitialDecisionSubmissions: 1,
+      successfulRevisionClaims: 0,
+      successfulRevisionLeaseRenewals: 0,
+      successfulRevisionSubmissions: 0,
       toolCalls: 1,
       totalLines: 2,
     });
@@ -80,9 +90,38 @@ describe("CodexJsonlObserver", () => {
     observer.push(Buffer.from(`${decisionEvent("failed", { message: "ticket secret" })}\n`));
     expect(observer.finish()).toEqual({
       failedToolCalls: 1,
+      successfulInitialClaims: 0,
       successfulDecisionSubmissions: 0,
+      successfulInitialDecisionSubmissions: 0,
+      successfulRevisionClaims: 0,
+      successfulRevisionLeaseRenewals: 0,
+      successfulRevisionSubmissions: 0,
       toolCalls: 1,
       totalLines: 1,
+    });
+  });
+
+  it("counts initial and revision terminal tools separately without retaining payloads", () => {
+    const observer = new CodexJsonlObserver();
+    observer.push(Buffer.from([
+      decisionEvent(),
+      JSON.stringify({
+        item: {
+          error: null,
+          server: "support-autopilot",
+          status: "completed",
+          tool: "submit_support_automation_revision",
+          type: "mcp_tool_call",
+        },
+        type: "item.completed",
+      }),
+      "",
+    ].join("\n")));
+
+    expect(observer.finish()).toMatchObject({
+      successfulDecisionSubmissions: 2,
+      successfulInitialDecisionSubmissions: 1,
+      successfulRevisionSubmissions: 1,
     });
   });
 });

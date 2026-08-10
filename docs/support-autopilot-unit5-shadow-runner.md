@@ -8,7 +8,7 @@ The runner records internal shadow decisions and cannot deliver them to customer
 2. Install the standalone Codex CLI, for example with `npm install -g @openai/codex`.
 3. Authenticate that CLI with ChatGPT in a reviewed workspace. API-key login is rejected.
 4. Create a dedicated absolute `CODEX_HOME` containing exactly one enabled MCP server named `support-autopilot`.
-5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure exactly the two reviewed non-secret MCP environment values `ADMIN_API_BASE_URL` and `SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH`; configure no token, no `env_vars`, and no other servers.
+5. Configure that server as stdio with the reviewed absolute Node executable and built `support-autopilot-mcp-launcher.js`. Configure exactly the two reviewed non-secret MCP environment values `ADMIN_API_BASE_URL` and `SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH`, plus the exact `env_vars = ["SUPPORT_AUTOPILOT_WORK_KIND"]` allowlist; configure no token and no other servers.
 6. Create an empty runtime directory. Never place repositories, ticket exports, or customer files there.
 7. Generate the service credential with `scripts/new-support-autopilot-credential.ps1` under the same Windows account that runs the shadow runner. It creates 256 random bits, protects the token with DPAPI CurrentUser, applies a user-only ACL, and prints only the SHA-256 digest and bounded timestamps needed by the server rotation workflow. Use `protect-support-autopilot-token.ps1` only when a separately issued token must be imported through `Read-Host -AsSecureString`.
 8. Record and approve the privacy attestation before setting backend or runner gates.
@@ -70,12 +70,15 @@ ADMIN_API_BASE_URL=<credential-free-https-url>
 Codex does not forward arbitrary parent-process values to stdio MCP servers. Register the same reviewed URL and DPAPI path explicitly in the dedicated profile:
 
 ```toml
+[mcp_servers.support-autopilot]
+env_vars = ["SUPPORT_AUTOPILOT_WORK_KIND"]
+
 [mcp_servers.support-autopilot.env]
 ADMIN_API_BASE_URL = "https://malikbot.ru/new-admin"
 SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH = "C:\\support-autopilot\\credentials\\support-autopilot.dpapi"
 ```
 
-The production preflight requires these exact two keys and exact configured values. The local doctor requires the exact credential path and a credential-free HTTPS URL. Any token, extra key, `env_vars` entry, URL credential/query/hash, or path mismatch fails closed. The synthetic profile remains environment-free.
+The production preflight requires these exact two keys, exact configured values, and exactly one allowlisted parent variable: `SUPPORT_AUTOPILOT_WORK_KIND`. The local doctor requires the exact credential path and a credential-free HTTPS URL. Any token, extra key, missing or extra `env_vars` entry, URL credential/query/hash, or path mismatch fails closed. The synthetic profile remains free of configured environment values but uses the same one-entry `env_vars` allowlist.
 
 Build with `npm run build`. `npm run support-autopilot:shadow` starts the foreground process only when the exact enable value is `true`.
 
@@ -272,11 +275,14 @@ $env:CODEX_HOME = 'C:\support-autopilot\synthetic-codex-home'
   'C:\Program Files\nodejs\node.exe' `
   'C:\reviewed-repo\dist\synthetic\synthetic-support-autopilot-mcp.js'
 
+# Add this exact line to [mcp_servers.support-autopilot] in config.toml:
+# env_vars = ["SUPPORT_AUTOPILOT_WORK_KIND"]
+
 & 'C:\Tools\codex.exe' login status
 & 'C:\Tools\codex.exe' mcp list --json
 ```
 
-The login must be exactly `Logged in using ChatGPT`. The MCP list must contain one enabled stdio server named `support-autopilot`, with the reviewed Node executable as its command, the compiled synthetic entry point as its sole argument, and no `cwd`, `env`, or `env_vars` configuration.
+The login must be exactly `Logged in using ChatGPT`. The MCP list must contain one enabled stdio server named `support-autopilot`, with the reviewed Node executable as its command, the compiled synthetic entry point as its sole argument, no `cwd` or configured `env`, and exactly `env_vars = ["SUPPORT_AUTOPILOT_WORK_KIND"]`.
 
 Run the canary from a shell where all four production variables are absent:
 

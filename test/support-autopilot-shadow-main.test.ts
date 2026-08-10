@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { runSupportAutopilotShadowMain, type SupportAutopilotShadowMainEvent } from "../src/runner/support-autopilot-shadow-main.js";
+import { CodexShadowWorkerFailure } from "../src/runner/codex-shadow-worker.js";
 import type { SupportAutopilotShadowRunnerConfig } from "../src/runner/support-autopilot-shadow-runner.config.js";
 
 const config: Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }> = {
@@ -21,6 +22,15 @@ const config: Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }> = {
 };
 
 describe("runSupportAutopilotShadowMain", () => {
+  function availabilityClient(response: unknown) {
+    return {
+      claimSupportAutomationRevision: vi.fn(),
+      failSupportAutomationRevision: vi.fn(),
+      post: vi.fn().mockResolvedValue(response),
+      renewSupportAutomationRevisionLease: vi.fn(),
+    };
+  }
+
   it("exits dormant before any side effect when disabled", async () => {
     const preflight = vi.fn();
     await expect(runSupportAutopilotShadowMain({}, {
@@ -35,11 +45,11 @@ describe("runSupportAutopilotShadowMain", () => {
     const abort = new AbortController();
     const post = vi.fn(async () => {
       order.push("availability");
-      return { retryAfterMs: 5_000, workAvailable: true };
+      return { retryAfterMs: 5_000, workAvailable: true, workKind: "initial" };
     });
     const events: SupportAutopilotShadowMainEvent[] = [];
     const result = await runSupportAutopilotShadowMain({}, {
-      apiClientFactory: () => ({ post }),
+      apiClientFactory: () => ({ ...availabilityClient(null), post }),
       budget: { reserve: vi.fn(async () => { order.push("budget"); return true; }) },
       loadConfig: () => config,
       logger: (event) => events.push(event),
@@ -63,8 +73,10 @@ describe("runSupportAutopilotShadowMain", () => {
     const runOne = vi.fn();
     const events: SupportAutopilotShadowMainEvent[] = [];
     await runSupportAutopilotShadowMain({}, {
-      apiClientFactory: () => ({
-        post: vi.fn().mockResolvedValue({ retryAfterMs: 5_000, workAvailable: true }),
+      apiClientFactory: () => availabilityClient({
+        retryAfterMs: 5_000,
+        workAvailable: true,
+        workKind: "revision",
       }),
       budget: { reserve: vi.fn().mockResolvedValue(false) },
       loadConfig: () => config,
@@ -98,11 +110,11 @@ describe("runSupportAutopilotShadowMain", () => {
     const post = vi.fn(async () => {
       expect(events).not.toContainEqual({ eventCode: "shadow_runner_ready" });
       abort.abort();
-      return { retryAfterMs: 5_000, workAvailable: false };
+      return { retryAfterMs: 5_000, workAvailable: false, workKind: null };
     });
 
     await runSupportAutopilotShadowMain({}, {
-      apiClientFactory: () => ({ post }),
+      apiClientFactory: () => ({ ...availabilityClient(null), post }),
       loadConfig: () => config,
       logger: (event) => events.push(event),
       preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
@@ -120,9 +132,10 @@ describe("runSupportAutopilotShadowMain", () => {
 
     await runSupportAutopilotShadowMain({}, {
       apiClientFactory: () => ({
+        ...availabilityClient(null),
         post: vi.fn(async () => {
           drainRequested = true;
-          return { retryAfterMs: 0, workAvailable: true };
+          return { retryAfterMs: 0, workAvailable: true, workKind: "initial" };
         }),
       }),
       budget: { reserve: vi.fn().mockResolvedValue(true) },
@@ -138,4 +151,95 @@ describe("runSupportAutopilotShadowMain", () => {
     expect(events).toContainEqual({ eventCode: "shadow_runner_ready" });
     expect(events).toContainEqual({ eventCode: "shadow_runner_stopped", tickCount: 1 });
   });
+
+  it.each(["initial", "revision"] as const)(
+    "passes backend-selected %s work to the worker after exactly one budget reservation",
+    async (workKind) => {
+      const abort = new AbortController();
+      const reserve = vi.fn().mockResolvedValue(true);
+      const runOne = vi.fn();
+
+      await runSupportAutopilotShadowMain({}, {
+        apiClientFactory: () => availabilityClient({
+          retryAfterMs: 5_000,
+          workAvailable: true,
+          workKind,
+        }),
+        budget: { reserve },
+        loadConfig: () => config,
+        logger: vi.fn(),
+        preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+        secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+        signal: abort.signal,
+        sleep: vi.fn(async () => { abort.abort(); }),
+        worker: { runOne },
+      });
+
+      expect(reserve).toHaveBeenCalledOnce();
+      expect(runOne).toHaveBeenCalledOnce();
+      expect(runOne).toHaveBeenCalledWith(workKind);
+    },
+  );
+
+  it.each([
+    { retryAfterMs: 5_000, workAvailable: true, workKind: null },
+    { retryAfterMs: 5_000, workAvailable: false, workKind: "initial" },
+    { retryAfterMs: 5_000, workAvailable: true },
+    { retryAfterMs: 5_000, workAvailable: true, workKind: "unknown" },
+  ])("fails closed for inconsistent availability %#", async (response) => {
+    const abort = new AbortController();
+    const reserve = vi.fn();
+    const runOne = vi.fn();
+
+    const result = await runSupportAutopilotShadowMain({}, {
+      apiClientFactory: () => availabilityClient(response),
+      budget: { reserve },
+      loadConfig: () => config,
+      logger: vi.fn(),
+      preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+      secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+      signal: abort.signal,
+      sleep: vi.fn(async () => { abort.abort(); }),
+      worker: { runOne },
+    });
+
+    expect(result).toEqual({ outcome: "stopped", ticks: 1 });
+    expect(reserve).not.toHaveBeenCalled();
+    expect(runOne).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, 1],
+    [true, 0],
+  ] as const)(
+    "releases a reservation only when worker failure happens before process launch: %s",
+    async (processInvocationStarted, expectedReleases) => {
+      const abort = new AbortController();
+      const release = vi.fn().mockResolvedValue(undefined);
+      const reserve = vi.fn().mockResolvedValue(true);
+
+      await runSupportAutopilotShadowMain({}, {
+        apiClientFactory: () => availabilityClient({
+          retryAfterMs: 5_000,
+          workAvailable: true,
+          workKind: "revision",
+        }),
+        budget: { release, reserve },
+        loadConfig: () => config,
+        logger: vi.fn(),
+        preflight: { run: vi.fn().mockResolvedValue({ outcome: "ready" }) },
+        secretProvider: { read: vi.fn().mockResolvedValue("service-secret") },
+        signal: abort.signal,
+        sleep: vi.fn(async () => { abort.abort(); }),
+        worker: {
+          runOne: vi.fn().mockRejectedValue(
+            new CodexShadowWorkerFailure(processInvocationStarted),
+          ),
+        },
+      });
+
+      expect(reserve).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledTimes(expectedReleases);
+    },
+  );
 });

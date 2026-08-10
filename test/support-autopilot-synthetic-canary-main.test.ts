@@ -75,6 +75,7 @@ describe("runSupportAutopilotSyntheticCanary", () => {
       processTimeoutMs: config.processTimeoutMs,
       runtimeDir: config.runtimeDir,
       workerId: config.workerId,
+      workKind: "initial",
     }, unusedProcessRunner);
     expect(result).toEqual({
       durationMs: 25,

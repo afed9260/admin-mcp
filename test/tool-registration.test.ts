@@ -15,7 +15,11 @@ import {
   safeAutomationToolNames,
   writeToolNames,
 } from "../src/tools/register-tools.js";
-import { supportAutopilotToolNames } from "../src/tools/support-autopilot-tools.js";
+import {
+  initialSupportAutopilotToolNames,
+  revisionSupportAutopilotToolNames,
+  supportAutopilotToolNames,
+} from "../src/tools/support-autopilot-tools.js";
 
 const config: AdminMcpConfig = {
   adminApiBaseUrl: "https://malikbot.ru/new-admin",
@@ -174,11 +178,25 @@ describe("createAdminMcpServer", () => {
 
     const toolNames = (await client.listTools()).tools.map((tool) => tool.name);
     expect(toolNames).toEqual(supportAutopilotToolNames);
+    expect(toolNames).not.toContain("fail_support_automation_revision");
     expect(toolNames).not.toEqual(expect.arrayContaining([
       ...readonlyToolNames,
       ...safeAutomationToolNames,
       ...writeToolNames,
     ]));
+  });
+
+  it.each([
+    ["initial", initialSupportAutopilotToolNames],
+    ["revision", revisionSupportAutopilotToolNames],
+  ] as const)("confines the support autopilot profile to %s work", async (workKind, expected) => {
+    const client = await connect(createAdminMcpServer({
+      ...config,
+      adminApiToken: "dedicated-support-token",
+      profile: "support_autopilot",
+    }, workKind));
+
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(expected);
   });
 
   it("keeps legacy readonly registration readonly even when write tools are enabled", async () => {

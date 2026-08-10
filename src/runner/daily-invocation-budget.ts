@@ -41,6 +41,31 @@ export class DailyInvocationBudget {
     });
   }
 
+  release(now = new Date()): Promise<void> {
+    return this.serialize(async () => {
+      let releaseFileLock: (() => Promise<void>) | undefined;
+      try {
+        await mkdir(path.dirname(this.statePath), { recursive: true });
+        releaseFileLock = await this.acquireFileLock();
+        const date = this.moscowDate(now);
+        const current = await this.readState();
+        if (current === null || current.date !== date || current.invocationCount === 0) {
+          return;
+        }
+        await this.writeState({
+          date,
+          invocationCount: current.invocationCount - 1,
+        });
+      } catch {
+        throw new Error("SUPPORT_AUTOPILOT_BUDGET_UNAVAILABLE");
+      } finally {
+        if (releaseFileLock) {
+          await releaseFileLock().catch(() => undefined);
+        }
+      }
+    });
+  }
+
   private async readState(): Promise<BudgetState | null> {
     let raw: string;
     try {

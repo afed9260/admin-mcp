@@ -2,6 +2,7 @@ import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { WindowsDpapiSecretProvider } from "./windows-dpapi-secret-provider.js";
+import { parseSupportAutopilotToolScope } from "../tools/support-autopilot-tools.js";
 
 type Environment = Record<string, string | undefined>;
 type Spawn = (
@@ -29,6 +30,9 @@ export async function launchSupportAutopilotMcp(
     const credentialBlobPath = absoluteWindowsPath(
       environment.SUPPORT_AUTOPILOT_CREDENTIAL_BLOB_PATH,
     );
+    const workKind = parseSupportAutopilotToolScope(
+      environment.SUPPORT_AUTOPILOT_WORK_KIND,
+    );
     const secretProvider = dependencies.secretProvider ?? new WindowsDpapiSecretProvider();
     const token = await secretProvider.read(credentialBlobPath);
     const spawn = dependencies.spawn ?? nodeSpawn;
@@ -46,6 +50,7 @@ export async function launchSupportAutopilotMcp(
         PATH: environment.PATH,
         PATHEXT: environment.PATHEXT,
         SUPPORT_AUTOPILOT_SERVICE_TOKEN: token,
+        SUPPORT_AUTOPILOT_WORK_KIND: workKind,
         SystemRoot: environment.SystemRoot,
         TEMP: environment.TEMP,
         TMP: environment.TMP,

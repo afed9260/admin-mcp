@@ -115,7 +115,7 @@ export class CodexShadowPreflight {
       ...CODEX_RESTRICTED_EXEC_ARGS,
       "--cd", this.config.runtimeDir,
       "-",
-    ], 1024 * 1024, SMOKE_PROMPT);
+    ], 1024 * 1024, SMOKE_PROMPT, "initial");
     const lines = result.stdout.split(/\r?\n/).filter(Boolean);
     let healthCalls = 0;
     for (const line of lines) {
@@ -148,11 +148,19 @@ export class CodexShadowPreflight {
     }
   }
 
-  private async runCommand(args: string[], maximumBytes: number, stdin?: string) {
+  private async runCommand(
+    args: string[],
+    maximumBytes: number,
+    stdin?: string,
+    workKind?: "initial" | "revision",
+  ) {
     const result = await this.processRunner.run({
       args,
       cwd: this.config.runtimeDir,
-      environment: createCodexChildEnvironment(this.config),
+      environment: {
+        ...createCodexChildEnvironment(this.config),
+        ...(workKind ? { SUPPORT_AUTOPILOT_WORK_KIND: workKind } : {}),
+      },
       executablePath: this.config.codexExecutablePath,
       maxOutputBytes: maximumBytes,
       stdin,

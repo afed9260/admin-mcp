@@ -3,7 +3,13 @@ import { existsSync } from "node:fs";
 import { SupportAutopilotApiClient } from "../backend/support-autopilot-api-client.js";
 import { SupportAutopilotQueueBridge, type SupportQueueBridgeEvent } from "../bridge/support-autopilot-queue-bridge.js";
 import { CodexShadowPreflight } from "./codex-shadow-preflight.js";
-import { CodexShadowWorker, type CodexShadowWorkerEvent } from "./codex-shadow-worker.js";
+import {
+  CodexShadowWorker,
+  CodexShadowWorkerFailure,
+  type CodexShadowWorkerEvent,
+} from "./codex-shadow-worker.js";
+import type { SupportRevisionHostClient } from "./codex-shadow-worker.js";
+import type { SupportAutomationWorkKind } from "./codex-support-decision-execution.js";
 import { SpawnCodexProcessRunner } from "./codex-process-runner.js";
 import { DailyInvocationBudget } from "./daily-invocation-budget.js";
 import {
@@ -13,7 +19,9 @@ import {
 import { WindowsDpapiSecretProvider } from "./windows-dpapi-secret-provider.js";
 
 type EnabledConfig = Extract<SupportAutopilotShadowRunnerConfig, { enabled: true }>;
-type ApiClient = { post<T>(path: string, body: unknown): Promise<T> };
+type ApiClient = SupportRevisionHostClient & {
+  post<T>(path: string, body: unknown): Promise<T>;
+};
 
 export type SupportAutopilotShadowMainEvent =
   | SupportQueueBridgeEvent
@@ -24,7 +32,7 @@ export type SupportAutopilotShadowMainEvent =
 
 export interface SupportAutopilotShadowMainDependencies {
   apiClientFactory?: (config: EnabledConfig, token: string) => ApiClient;
-  budget?: Pick<DailyInvocationBudget, "reserve">;
+  budget?: Pick<DailyInvocationBudget, "reserve"> & Partial<Pick<DailyInvocationBudget, "release">>;
   drainRequested?: () => boolean;
   loadConfig?: (environment: Record<string, string | undefined>) => SupportAutopilotShadowRunnerConfig;
   logger?: (event: SupportAutopilotShadowMainEvent) => void;
@@ -32,7 +40,7 @@ export interface SupportAutopilotShadowMainDependencies {
   secretProvider?: Pick<WindowsDpapiSecretProvider, "read">;
   signal?: AbortSignal;
   sleep?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
-  worker?: Pick<CodexShadowWorker, "runOne">;
+  worker?: { runOne(workKind: SupportAutomationWorkKind): Promise<unknown> };
 }
 
 export async function runSupportAutopilotShadowMain(
@@ -65,12 +73,14 @@ export async function runSupportAutopilotShadowMain(
       config,
       processRunner,
       (event) => log(logger, event),
+      client,
     );
     const drainRequested = dependencies.drainRequested ?? (() => {
       const requestPath = environment.SUPPORT_AUTOPILOT_DRAIN_REQUEST_PATH;
       return typeof requestPath === "string" && requestPath.length > 0 && existsSync(requestPath);
     });
     let readyLogged = false;
+    let pendingWorkKind: SupportAutomationWorkKind | null = null;
     bridge = new SupportAutopilotQueueBridge(
       {
         getAvailability: async () => {
@@ -79,6 +89,7 @@ export async function runSupportAutopilotShadowMain(
             { workerId: config.workerId },
           );
           const availability = parseAvailability(response);
+          pendingWorkKind = availability.workKind;
           if (!readyLogged) {
             readyLogged = true;
             log(logger, { eventCode: "shadow_runner_ready" });
@@ -88,11 +99,28 @@ export async function runSupportAutopilotShadowMain(
       },
       {
         runOne: async () => {
-          if (!await budget.reserve()) {
+          const reservationTime = new Date();
+          if (!await budget.reserve(reservationTime)) {
             log(logger, { eventCode: "shadow_daily_budget_exhausted" });
             throw new Error("daily budget exhausted");
           }
-          await worker.runOne();
+          if (pendingWorkKind === null) {
+            throw new Error("work kind missing for available support work");
+          }
+          const selectedWorkKind = pendingWorkKind;
+          pendingWorkKind = null;
+          try {
+            await worker.runOne(selectedWorkKind);
+          } catch (error: unknown) {
+            if (
+              error instanceof CodexShadowWorkerFailure
+              && !error.processInvocationStarted
+              && budget.release !== undefined
+            ) {
+              await budget.release(reservationTime).catch(() => undefined);
+            }
+            throw error;
+          }
         },
       },
       { logger: (event) => log(logger, event), shouldStop: drainRequested },
@@ -116,7 +144,11 @@ export async function runSupportAutopilotShadowMain(
   }
 }
 
-function parseAvailability(value: unknown): { retryAfterMs: number; workAvailable: boolean } {
+function parseAvailability(value: unknown): {
+  retryAfterMs: number;
+  workAvailable: boolean;
+  workKind: SupportAutomationWorkKind | null;
+} {
   if (
     typeof value !== "object"
     || value === null
@@ -125,12 +157,20 @@ function parseAvailability(value: unknown): { retryAfterMs: number; workAvailabl
     || !Number.isSafeInteger((value as Record<string, unknown>).retryAfterMs)
     || Number((value as Record<string, unknown>).retryAfterMs) < 0
     || Number((value as Record<string, unknown>).retryAfterMs) > 30_000
+    || !["initial", "revision", null].includes(
+      (value as Record<string, unknown>).workKind as never,
+    )
+    || (
+      Boolean((value as Record<string, unknown>).workAvailable)
+      !== ((value as Record<string, unknown>).workKind !== null)
+    )
   ) {
     throw new Error("invalid availability");
   }
   return {
     retryAfterMs: Number((value as Record<string, unknown>).retryAfterMs),
     workAvailable: Boolean((value as Record<string, unknown>).workAvailable),
+    workKind: (value as Record<string, unknown>).workKind as SupportAutomationWorkKind | null,
   };
 }
 

@@ -1,4 +1,9 @@
 import type { SupportAutopilotClient } from "../tools/support-autopilot-tools.js";
+import type {
+  SupportAutomationRevisionDecisionInput,
+  SupportAutomationRevisionLeaseIdentity,
+  SupportAutomationWorkerIdentity,
+} from "../backend/support-autopilot-api-client.js";
 
 export const SYNTHETIC_JOB_ID = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
 export const SYNTHETIC_LATEST_MESSAGE_ID = "6cc98548-b99e-4e93-93ed-7281499fc4c7";
@@ -36,6 +41,7 @@ export class SyntheticSupportAutopilotApi implements SupportAutopilotClient {
       return this.result<T>({
         retryAfterMs: 5_000,
         workAvailable: this.state === "available",
+        workKind: this.state === "available" ? "initial" : null,
       });
     }
     if (path === "/support-automation/jobs/claim") {
@@ -87,6 +93,30 @@ export class SyntheticSupportAutopilotApi implements SupportAutopilotClient {
         ticketMutation: false,
       });
     }
+    throw this.invalid();
+  }
+
+  async claimSupportAutomationRevision(
+    _input: SupportAutomationWorkerIdentity,
+  ): Promise<unknown> {
+    throw this.invalid();
+  }
+
+  async renewSupportAutomationRevisionLease(
+    _input: SupportAutomationRevisionLeaseIdentity,
+  ): Promise<unknown> {
+    throw this.invalid();
+  }
+
+  async getSupportAutomationRevisionContext(
+    _input: SupportAutomationRevisionLeaseIdentity,
+  ): Promise<unknown> {
+    throw this.invalid();
+  }
+
+  async submitSupportAutomationRevision(
+    _input: SupportAutomationRevisionDecisionInput,
+  ): Promise<unknown> {
     throw this.invalid();
   }
 
