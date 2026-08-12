@@ -109,6 +109,7 @@ describe("writeToolNames", () => {
       "execute_support_action_batch",
       "apply_customer_dialog_launch_credits",
       "apply_successful_dialog_debt_recovery",
+      "apply_successful_dialog_existing_slot_recovery",
       "approve_referral_manual_review_grant",
       "reject_referral_manual_review_grant",
     ]);
@@ -122,6 +123,7 @@ describe("safeAutomationToolNames", () => {
       "investigate_support_ticket",
       "dry_run_customer_dialog_launch_credits",
       "dry_run_successful_dialog_debt_recovery",
+      "dry_run_successful_dialog_existing_slot_recovery",
       "dry_run_reactivation_dialog_credits",
       "dry_run_reactivation_notification",
       "dry_run_broad_relaunch_notification",
@@ -235,9 +237,11 @@ describe("createAdminMcpServer", () => {
     expect(disabledToolNames).toContain("get_customer_billing_reconciliation");
     expect(disabledToolNames).toContain("dry_run_customer_dialog_launch_credits");
     expect(disabledToolNames).toContain("dry_run_successful_dialog_debt_recovery");
+    expect(disabledToolNames).toContain("dry_run_successful_dialog_existing_slot_recovery");
     expect(disabledToolNames).toContain("list_referral_manual_review_items");
     expect(disabledToolNames).not.toContain("apply_customer_dialog_launch_credits");
     expect(disabledToolNames).not.toContain("apply_successful_dialog_debt_recovery");
+    expect(disabledToolNames).not.toContain("apply_successful_dialog_existing_slot_recovery");
     expect(disabledToolNames).not.toContain("approve_referral_manual_review_grant");
     expect(disabledToolNames).not.toContain("reject_referral_manual_review_grant");
 
@@ -263,6 +267,25 @@ describe("createAdminMcpServer", () => {
     const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
     const tool = (await enabledClient.listTools()).tools.find(
       (item) => item.name === "apply_successful_dialog_debt_recovery",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+
+  it("publishes successful-dialog existing-slot recovery apply as a write tool only when write tools are enabled", async () => {
+    const disabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: false }));
+    const disabledToolNames = (await disabledClient.listTools()).tools.map((tool) => tool.name);
+    expect(disabledToolNames).toContain("dry_run_successful_dialog_existing_slot_recovery");
+    expect(disabledToolNames).not.toContain("apply_successful_dialog_existing_slot_recovery");
+
+    const enabledClient = await connect(createAdminMcpServer({ ...config, enableWriteTools: true }));
+    const tool = (await enabledClient.listTools()).tools.find(
+      (item) => item.name === "apply_successful_dialog_existing_slot_recovery",
     );
 
     expect(tool).toBeDefined();

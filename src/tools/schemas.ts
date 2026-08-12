@@ -299,6 +299,22 @@ export const successfulDialogDebtRecoveryApplySchema = successfulDialogDebtRecov
   })
   .strict();
 
+export const successfulDialogExistingSlotRecoveryDryRunSchema = customerOperationsProfileQuerySchema
+  .extend({
+    manualReviewChatIds: z.array(z.string().trim().min(1).max(300)).max(100).optional(),
+  })
+  .strict();
+
+export const successfulDialogExistingSlotRecoveryApplySchema = successfulDialogExistingSlotRecoveryDryRunSchema
+  .extend({
+    confirm: z.literal(true),
+    idempotencyKey: z.string().trim().min(8).max(200),
+    reason: z.string().trim().min(3).max(300),
+    expectedRecoverableCount: z.number().int().min(0).max(1000),
+    expectedRecoverableAmountRub: z.number().min(0).max(1_000_000),
+  })
+  .strict();
+
 export const referralManualReviewListSchema = z
   .object({
     limit: z.number().int().min(1).max(100).default(50),
@@ -584,6 +600,10 @@ export type CustomerDialogLaunchCreditDryRun = z.infer<typeof customerDialogLaun
 export type CustomerDialogLaunchCreditApply = z.infer<typeof customerDialogLaunchCreditApplySchema>;
 export type SuccessfulDialogDebtRecoveryDryRun = z.infer<typeof successfulDialogDebtRecoveryDryRunSchema>;
 export type SuccessfulDialogDebtRecoveryApply = z.infer<typeof successfulDialogDebtRecoveryApplySchema>;
+export type SuccessfulDialogExistingSlotRecoveryDryRun =
+  z.infer<typeof successfulDialogExistingSlotRecoveryDryRunSchema>;
+export type SuccessfulDialogExistingSlotRecoveryApply =
+  z.infer<typeof successfulDialogExistingSlotRecoveryApplySchema>;
 export type ReferralManualReviewList = z.infer<typeof referralManualReviewListSchema>;
 export type ReferralManualReviewApprove = z.infer<typeof referralManualReviewApproveSchema>;
 export type ReferralManualReviewReject = z.infer<typeof referralManualReviewRejectSchema>;

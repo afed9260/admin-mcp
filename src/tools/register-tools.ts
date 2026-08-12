@@ -57,6 +57,8 @@ import {
   supportTicketsQuerySchema,
   successfulDialogDebtRecoveryApplySchema,
   successfulDialogDebtRecoveryDryRunSchema,
+  successfulDialogExistingSlotRecoveryApplySchema,
+  successfulDialogExistingSlotRecoveryDryRunSchema,
 } from "./schemas.js";
 import { createStatisticsTools } from "./statistics-tools.js";
 import { createSupportTools } from "./support-tools.js";
@@ -102,6 +104,7 @@ export const safeAutomationToolNames = [
   "investigate_support_ticket",
   "dry_run_customer_dialog_launch_credits",
   "dry_run_successful_dialog_debt_recovery",
+  "dry_run_successful_dialog_existing_slot_recovery",
   "dry_run_reactivation_dialog_credits",
   "dry_run_reactivation_notification",
   "dry_run_broad_relaunch_notification",
@@ -122,6 +125,7 @@ export const writeToolNames = [
   "execute_support_action_batch",
   "apply_customer_dialog_launch_credits",
   "apply_successful_dialog_debt_recovery",
+  "apply_successful_dialog_existing_slot_recovery",
   "approve_referral_manual_review_grant",
   "reject_referral_manual_review_grant",
 ] as const;
@@ -842,6 +846,24 @@ function registerTools(
     );
 
     server.registerTool(
+      "dry_run_successful_dialog_existing_slot_recovery",
+      {
+        description:
+          "Run a guarded dry-run for recovering successful-dialog debt from an owner's existing package slots. Does not apply debits.",
+        inputSchema: inputSchema(successfulDialogExistingSlotRecoveryDryRunSchema),
+        annotations: writeAnnotations,
+      },
+      (input) =>
+        runWithAudit(
+          config,
+          "dry_run_successful_dialog_existing_slot_recovery",
+          "/customer-operations/successful-dialog-debt-recovery/existing-slots/dry-run",
+          input,
+          customerOperationsTools.dryRunSuccessfulDialogExistingSlotRecovery,
+        ),
+    );
+
+    server.registerTool(
       "dry_run_reactivation_dialog_credits",
       {
         description:
@@ -1115,6 +1137,24 @@ function registerTools(
         "/customer-operations/successful-dialog-debt-recovery/apply",
         input,
         customerOperationsTools.applySuccessfulDialogDebtRecovery,
+      ),
+  );
+
+  server.registerTool(
+    "apply_successful_dialog_existing_slot_recovery",
+    {
+      description:
+        "Apply guarded successful-dialog debt recovery from an owner's existing package slots. Requires confirm=true, reason, idempotencyKey, and expected dry-run totals.",
+      inputSchema: inputSchema(successfulDialogExistingSlotRecoveryApplySchema),
+      annotations: writeAnnotations,
+    },
+    (input) =>
+      runWithAudit(
+        config,
+        "apply_successful_dialog_existing_slot_recovery",
+        "/customer-operations/successful-dialog-debt-recovery/existing-slots/apply",
+        input,
+        customerOperationsTools.applySuccessfulDialogExistingSlotRecovery,
       ),
   );
 

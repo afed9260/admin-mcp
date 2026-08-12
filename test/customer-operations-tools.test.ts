@@ -144,6 +144,69 @@ describe("createCustomerOperationsTools", () => {
     expect(client.post).not.toHaveBeenCalled();
   });
 
+  it("dry-runs successful-dialog debt recovery from existing package slots", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.dryRunSuccessfulDialogExistingSlotRecovery({
+      telegramUserId: 437078503,
+      workspaceId: "workspace-1",
+      sdelkaUserId: "user-1",
+      manualReviewChatIds: ["chat-review"],
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith(
+      "/customer-operations/successful-dialog-debt-recovery/existing-slots/dry-run",
+      {
+        telegramUserId: 437078503,
+        workspaceId: "workspace-1",
+        sdelkaUserId: "user-1",
+        manualReviewChatIds: ["chat-review"],
+      },
+    );
+  });
+
+  it("applies successful-dialog debt recovery from existing package slots with guarded totals", async () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    await expect(tools.applySuccessfulDialogExistingSlotRecovery({
+      telegramUserId: 437078503,
+      expectedRecoverableCount: 2,
+      expectedRecoverableAmountRub: 800,
+      idempotencyKey: "existing-slot-debt-recovery-user",
+      reason: "operator reviewed existing slot debt rows",
+      confirm: true,
+    })).resolves.toEqual({ ok: true });
+
+    expect(client.post).toHaveBeenCalledWith(
+      "/customer-operations/successful-dialog-debt-recovery/existing-slots/apply",
+      {
+        telegramUserId: 437078503,
+        expectedRecoverableCount: 2,
+        expectedRecoverableAmountRub: 800,
+        idempotencyKey: "existing-slot-debt-recovery-user",
+        reason: "operator reviewed existing slot debt rows",
+        confirm: true,
+      },
+    );
+  });
+
+  it("rejects existing-slot debt recovery apply without confirmation before reaching the backend", () => {
+    const client = createClient();
+    const tools = createCustomerOperationsTools(client);
+
+    expect(() => tools.applySuccessfulDialogExistingSlotRecovery({
+      telegramUserId: 437078503,
+      expectedRecoverableCount: 2,
+      expectedRecoverableAmountRub: 800,
+      idempotencyKey: "existing-slot-debt-recovery-user",
+      reason: "operator reviewed existing slot debt rows",
+    })).toThrow(/confirm/);
+
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
   it("rejects apply without confirmation before reaching the backend", () => {
     const client = createClient();
     const tools = createCustomerOperationsTools(client);
