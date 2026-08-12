@@ -29,7 +29,7 @@ function New-TaskXml {
   $startBoundary = [DateTime]::Now.AddMinutes(1).ToString('s')
   $encodedSid = Escape-Xml $CurrentUserSid
   $encodedWorkingDirectory = Escape-Xml $AdminMcpRoot
-  $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+  $arguments = '-WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
     $ScriptPath + '" -InstallRoot "' + $InstallRoot + '"'
   $encodedArguments = Escape-Xml $arguments
   return @"

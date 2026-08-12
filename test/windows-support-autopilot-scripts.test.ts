@@ -317,6 +317,32 @@ describe("Windows support autopilot lifecycle scripts", () => {
       expect(readdirSync(credentialRoot).filter((name) => name.startsWith("candidate-")))
         .toEqual([]);
       expect(existsSync(fakeGitHubStatePath)).toBe(true);
+
+      const followUp = spawnSync("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.resolve("scripts", "invoke-support-autopilot-credential-supervisor.ps1"),
+        "-InstallRoot",
+        installRoot,
+        "-NodeExecutable",
+        process.execPath,
+        "-GitHubCliPath",
+        path.join(fixtures, "fake-gh.cmd"),
+      ], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          SUPPORT_AUTOPILOT_FAKE_GH_STATE_PATH: fakeGitHubStatePath,
+          SUPPORT_AUTOPILOT_TEST_HEARTBEAT_PATH: fakeHeartbeatPath,
+        },
+        timeout: 30_000,
+        windowsHide: true,
+      });
+      expect(followUp.status, followUp.stderr).toBe(0);
+      expect(JSON.parse(followUp.stdout.trim())).toEqual({ outcome: "healthy", rotated: false });
     } finally {
       if (initialRunner.exitCode === null) initialRunner.kill();
       spawnSync("powershell.exe", [
@@ -714,8 +740,19 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("interval = 'PT15M'");
     expect(source).toContain("Register-ScheduledTask");
     expect(source).toContain("[xml](New-TaskXml");
+    expect(source).toMatch(/\$arguments\s*=\s*'-WindowStyle Hidden /);
     expect(source).not.toMatch(/-Password\b/i);
     expect(source).toContain("[switch]$PlanOnly");
+  });
+
+  it("records a bounded failure stage when the credential supervisor fails", () => {
+    const source = script("invoke-support-autopilot-credential-supervisor.ps1");
+    const trapBlock = source.slice(source.indexOf("trap {"), source.indexOf("function ConvertTo-CanonicalUtc"));
+
+    expect(source).toContain("$script:FailureStage = 'initialization'");
+    expect(source).toContain("$script:FailureStage = 'queue_health'");
+    expect(trapBlock).toContain("-Stage $script:FailureStage");
+    expect(trapBlock).not.toContain("$_.Exception.Message");
   });
 
   it("uninstalls only the two exact task names", () => {
