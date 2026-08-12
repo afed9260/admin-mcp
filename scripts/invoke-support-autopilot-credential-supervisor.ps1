@@ -41,8 +41,7 @@ $StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-run
 $CredentialGenerator = Join-Path $AdminMcpRoot 'scripts\new-support-autopilot-credential.ps1'
 $InventoryPath = Join-Path $StateRoot 'credential-workflow-runs.json'
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
-$RunnerStartStdoutPath = Join-Path $StateRoot 'runner-start.stdout.log'
-$RunnerStartStderrPath = Join-Path $StateRoot 'runner-start.stderr.log'
+$script:FailureStage = 'initialization'
 
 trap {
   try {
@@ -50,6 +49,7 @@ trap {
       Write-SupportAutopilotRedactedEvent `
         -EventPath $EventPath `
         -EventCode 'credential_supervisor_failed' `
+        -Stage $script:FailureStage `
         -Outcome 'fixed_failure'
     }
   }
@@ -192,6 +192,7 @@ function Set-RunnerEnvironment {
 }
 
 function Get-QueueHealth {
+  $script:FailureStage = 'queue_health'
   Set-RunnerEnvironment
   $output = & $NodeExecutable $HealthMain 2>$null
   if ($LASTEXITCODE -ne 0) {
@@ -217,15 +218,28 @@ function Get-ExactRunnerProcess {
   })
 }
 
+function Remove-StaleRunnerStartLogs {
+  foreach ($path in @(Get-ChildItem -LiteralPath $StateRoot -Filter 'runner-start-*.log' -File)) {
+    try {
+      Remove-Item -LiteralPath $path.FullName -Force -ErrorAction Stop
+    }
+    catch {}
+  }
+}
+
 function Start-Runner {
   param([switch]$PromotionMode)
+  $script:FailureStage = 'runner_start_health'
   $heartbeatBaseline = (Get-QueueHealth).runnerLastSeenAt
+  $script:FailureStage = 'runner_process_discovery'
   $existing = @(Get-ExactRunnerProcess)
+  $script:FailureStage = 'runner_process_validation'
   if ($existing.Count -gt 1) {
     throw 'multiple_exact_runner_processes'
   }
   $baselineProcessIds = @($existing | ForEach-Object { [long]$_.ProcessId })
 
+  $script:FailureStage = 'runner_helper_arguments'
   $arguments = @(
     '-NoProfile',
     '-NonInteractive',
@@ -238,10 +252,19 @@ function Start-Runner {
   if ($PromotionMode) {
     $arguments += '-AllowPendingPromotion'
   }
+  Remove-StaleRunnerStartLogs
+  $helperRunId = [Guid]::NewGuid().ToString('N')
+  $RunnerStartStdoutPath = Join-Path $StateRoot "runner-start-$helperRunId.stdout.log"
+  $RunnerStartStderrPath = Join-Path $StateRoot "runner-start-$helperRunId.stderr.log"
+  $script:FailureStage = 'runner_stdout_reset'
   [IO.File]::WriteAllText($RunnerStartStdoutPath, '', [Text.UTF8Encoding]::new($false))
+  $script:FailureStage = 'runner_stderr_reset'
   [IO.File]::WriteAllText($RunnerStartStderrPath, '', [Text.UTF8Encoding]::new($false))
+  $script:FailureStage = 'runner_stdout_acl'
   Set-SupportAutopilotCurrentUserAcl -Path $RunnerStartStdoutPath
+  $script:FailureStage = 'runner_stderr_acl'
   Set-SupportAutopilotCurrentUserAcl -Path $RunnerStartStderrPath
+  $script:FailureStage = 'runner_helper_launch'
   $helper = Start-Process `
     -FilePath 'powershell.exe' `
     -ArgumentList $arguments `
@@ -349,6 +372,14 @@ function Start-Runner {
     -EventPath $EventPath `
     -EventCode 'runner_start_confirmed' `
     -Outcome $startOutcome
+  if (-not $startedNew) {
+    foreach ($path in @($RunnerStartStdoutPath, $RunnerStartStderrPath)) {
+      try {
+        Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+      }
+      catch {}
+    }
+  }
   return [pscustomobject]@{
     heartbeatBaseline = $heartbeatBaseline
     processId = $reportedProcessId
