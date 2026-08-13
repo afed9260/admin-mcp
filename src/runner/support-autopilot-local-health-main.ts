@@ -32,7 +32,7 @@ const healthSchema = z.object({
   runnerLastSeenAt: canonicalIso.nullable(),
   runnerReady: z.boolean(),
   shadowModeEnabled: z.boolean(),
-}).strict();
+}).strip();
 
 export interface SupportAutopilotLocalHealth {
   activeLeases: number;
