@@ -110,8 +110,10 @@ describe("runCodexSupportDecision", () => {
     expect(input.environment).toEqual({ CODEX_HOME: "C:\\Synthetic\\codex-home" });
     expect(input.stdin).toContain("support-synthetic.1");
     expect(input.stdin).toContain("top-level arguments");
+    expect(input.stdin).toContain("Read the current context before submitting");
+    expect(input.stdin).toContain("The MCP server binds the current message and ticket version");
     expect(input.stdin).toContain("never nest them under a decision object");
-    expect(input.stdin).not.toMatch(/ticket|leaseToken|proposedReply/i);
+    expect(input.stdin).not.toMatch(/leaseToken|proposedReply/i);
     expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
   });
 

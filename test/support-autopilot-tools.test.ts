@@ -119,7 +119,15 @@ describe("registerSupportAutopilotTools", () => {
   });
 
   it("reads lease-scoped context through one fixed endpoint", async () => {
-    const post = vi.fn().mockResolvedValue({ mode: "shadow", messages: [] });
+    const post = vi.fn().mockResolvedValue({
+      currentTicket: {
+        automationVersion: 7,
+        latestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      },
+      jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      mode: "shadow",
+      messages: [],
+    });
     const client = await connect({ get: vi.fn(), post });
     const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
     const leaseToken = "A".repeat(43);
@@ -173,33 +181,248 @@ describe("registerSupportAutopilotTools", () => {
     expect(JSON.stringify(result.content[1])).not.toContain(dataBase64);
   });
 
-  it("submits one exact bounded shadow decision without a job id in the body", async () => {
+  it("rejects model-supplied fence fields even after authoritative context was loaded", async () => {
     const post = vi.fn().mockResolvedValue({
-      customerAction: "none",
-      jobStatus: "completed",
-      outcome: "shadow_recorded",
-      ticketMutation: false,
+      currentTicket: {
+        automationVersion: 7,
+        latestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      },
+      jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+      mode: "shadow",
+      messages: [],
     });
     const client = await connect({ get: vi.fn(), post });
     const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const leaseToken = "A".repeat(43);
     const body = {
       decisionType: "escalate",
       evidenceFactKeys: ["ticket.state"],
       expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
       expectedTicketVersion: 7,
       internalReasoning: "Insufficient evidence.",
-      leaseToken: "A".repeat(43),
+      leaseToken,
       proposedReply: null,
       selectedPolicyId: "unclassified.v1",
       workerId: "support-worker.1",
     };
 
     await client.callTool({
+      name: "get_support_automation_context",
+      arguments: { jobId, leaseToken, workerId: "support-worker.1" },
+    });
+    const result = await client.callTool({
       name: "submit_support_automation_decision",
       arguments: { jobId, ...body },
     });
 
-    expect(post).toHaveBeenCalledWith(`/support-automation/jobs/${jobId}/decision`, body);
+    expect(result.isError).toBe(true);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds the decision to the authoritative current context instead of model-supplied fence fields", async () => {
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const latestMessageId = "6cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const leaseToken = "A".repeat(43);
+    const post = vi.fn()
+      .mockResolvedValueOnce({
+        currentTicket: {
+          automationVersion: 24,
+          latestMessageId,
+        },
+        jobId,
+        messages: [],
+        mode: "shadow",
+      })
+      .mockResolvedValueOnce({
+        customerAction: "none",
+        jobStatus: "completed",
+        outcome: "shadow_recorded",
+        ticketMutation: false,
+      });
+    const client = await connect({ get: vi.fn(), post });
+
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: { jobId, leaseToken, workerId: "support-worker.1" },
+    });
+    const result = await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: {
+        decisionType: "escalate",
+        evidenceFactKeys: ["ticket.state"],
+        internalReasoning: "Insufficient evidence.",
+        jobId,
+        leaseToken,
+        proposedReply: null,
+        selectedPolicyId: "unclassified.v1",
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(post).toHaveBeenNthCalledWith(2, `/support-automation/jobs/${jobId}/decision`, {
+      decisionType: "escalate",
+      evidenceFactKeys: ["ticket.state"],
+      expectedLatestMessageId: latestMessageId,
+      expectedTicketVersion: 24,
+      internalReasoning: "Insufficient evidence.",
+      leaseToken,
+      proposedReply: null,
+      selectedPolicyId: "unclassified.v1",
+      workerId: "support-worker.1",
+    });
+  });
+
+  it("fails closed before backend IO when a decision is submitted without current context", async () => {
+    const post = vi.fn();
+    const client = await connect({ get: vi.fn(), post });
+
+    const result = await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: {
+        decisionType: "escalate",
+        evidenceFactKeys: ["ticket.state"],
+        internalReasoning: "Insufficient evidence.",
+        jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
+        leaseToken: "A".repeat(43),
+        proposedReply: null,
+        selectedPolicyId: "unclassified.v1",
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("invalidates authoritative context after a successful lease renewal", async () => {
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const originalLeaseToken = "A".repeat(43);
+    const renewedLeaseToken = "B".repeat(43);
+    const post = vi.fn()
+      .mockResolvedValueOnce({
+        currentTicket: {
+          automationVersion: 24,
+          latestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+        },
+        jobId,
+      })
+      .mockResolvedValueOnce({
+        jobId,
+        leaseExpiresAt: "2026-08-04T12:10:00.000Z",
+        leaseToken: renewedLeaseToken,
+      });
+    const client = await connect({ get: vi.fn(), post });
+
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: {
+        jobId,
+        leaseToken: originalLeaseToken,
+        workerId: "support-worker.1",
+      },
+    });
+    await client.callTool({
+      name: "renew_support_automation_lease",
+      arguments: {
+        jobId,
+        leaseToken: originalLeaseToken,
+        workerId: "support-worker.1",
+      },
+    });
+    const result = await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: {
+        decisionType: "escalate",
+        evidenceFactKeys: ["ticket.state"],
+        internalReasoning: "Insufficient evidence.",
+        jobId,
+        leaseToken: renewedLeaseToken,
+        proposedReply: null,
+        selectedPolicyId: "unclassified.v1",
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears cached context before a failed context refresh", async () => {
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const leaseToken = "A".repeat(43);
+    const post = vi.fn()
+      .mockResolvedValueOnce({
+        currentTicket: {
+          automationVersion: 24,
+          latestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+        },
+        jobId,
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    const client = await connect({ get: vi.fn(), post });
+
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: { jobId, leaseToken, workerId: "support-worker.1" },
+    });
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: { jobId, leaseToken, workerId: "support-worker.1" },
+    });
+    const result = await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: {
+        decisionType: "escalate",
+        evidenceFactKeys: ["ticket.state"],
+        internalReasoning: "Insufficient evidence.",
+        jobId,
+        leaseToken,
+        proposedReply: null,
+        selectedPolicyId: "unclassified.v1",
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds authoritative context to the lease token that read it", async () => {
+    const jobId = "5cc98548-b99e-4e93-93ed-7281499fc4c7";
+    const post = vi.fn().mockResolvedValueOnce({
+      currentTicket: {
+        automationVersion: 24,
+        latestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
+      },
+      jobId,
+    });
+    const client = await connect({ get: vi.fn(), post });
+
+    await client.callTool({
+      name: "get_support_automation_context",
+      arguments: {
+        jobId,
+        leaseToken: "A".repeat(43),
+        workerId: "support-worker.1",
+      },
+    });
+    const result = await client.callTool({
+      name: "submit_support_automation_decision",
+      arguments: {
+        decisionType: "escalate",
+        evidenceFactKeys: ["ticket.state"],
+        internalReasoning: "Insufficient evidence.",
+        jobId,
+        leaseToken: "B".repeat(43),
+        proposedReply: null,
+        selectedPolicyId: "unclassified.v1",
+        workerId: "support-worker.1",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(post).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -222,8 +445,6 @@ describe("registerSupportAutopilotTools", () => {
     ["submit_support_automation_decision", {
       decisionType: "escalate",
       evidenceFactKeys: [],
-      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
-      expectedTicketVersion: 7,
       internalReasoning: "Insufficient evidence.",
       jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
       leaseToken: "A".repeat(43),
@@ -234,8 +455,6 @@ describe("registerSupportAutopilotTools", () => {
     ["submit_support_automation_decision", {
       decisionType: "auto_reply",
       evidenceFactKeys: ["ticket.state"],
-      expectedLatestMessageId: "6cc98548-b99e-4e93-93ed-7281499fc4c7",
-      expectedTicketVersion: 7,
       internalReasoning: "Known policy.",
       jobId: "5cc98548-b99e-4e93-93ed-7281499fc4c7",
       leaseToken: "A".repeat(43),

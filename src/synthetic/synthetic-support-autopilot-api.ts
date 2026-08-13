@@ -93,6 +93,10 @@ export class SyntheticSupportAutopilotApi implements SupportAutopilotClient {
   private context() {
     return {
       attachmentRefs: [],
+      currentTicket: {
+        automationVersion: 1,
+        latestMessageId: SYNTHETIC_LATEST_MESSAGE_ID,
+      },
       evidenceFacts: {
         "ticket.latest_message": {
           id: SYNTHETIC_LATEST_MESSAGE_ID,

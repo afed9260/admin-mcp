@@ -3,7 +3,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   SYNTHETIC_JOB_ID,
-  SYNTHETIC_LATEST_MESSAGE_ID,
   SYNTHETIC_LEASE_TOKEN,
 } from "../src/synthetic/synthetic-support-autopilot-api.js";
 import { createSyntheticSupportAutopilotMcpServer } from "../src/synthetic/synthetic-support-autopilot-mcp.js";
@@ -52,8 +51,6 @@ describe("createSyntheticSupportAutopilotMcpServer", () => {
       arguments: {
         decisionType: "request_information",
         evidenceFactKeys: ["ticket.state", "ticket.latest_message"],
-        expectedLatestMessageId: SYNTHETIC_LATEST_MESSAGE_ID,
-        expectedTicketVersion: 1,
         internalReasoning: "Synthetic evidence is sufficient.",
         jobId: SYNTHETIC_JOB_ID,
         leaseToken: SYNTHETIC_LEASE_TOKEN,
@@ -64,6 +61,10 @@ describe("createSyntheticSupportAutopilotMcpServer", () => {
       name: "submit_support_automation_decision",
     });
     expect(decision.isError).not.toBe(true);
+    const decisionText = decision.content.find((item) => item.type === "text");
+    expect(decisionText?.type).toBe("text");
+    expect(JSON.parse(decisionText?.type === "text" ? decisionText.text : "null"))
+      .toMatchObject({ customerAction: "none", ticketMutation: false });
   });
 
   it("keeps schema failures inside the synthetic MCP boundary", async () => {

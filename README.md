@@ -55,7 +55,9 @@ Claim and renewal use one-time lease tokens. These tools intentionally bypass th
 lease tokens are not persisted. The backend stores only their SHA-256 hashes.
 
 Context and image access require the current lease. Decision submission records a shadow result only: it cannot send
-customer text, change ticket lifecycle, or execute an action. The standalone runner remains disabled unless its exact
+customer text, change ticket lifecycle, or execute an action. Before a decision can be submitted, the MCP server binds
+it to the authoritative latest message and ticket version returned by the current context; model-supplied fence values
+are rejected. The standalone runner remains disabled unless its exact
 enable flag, privacy attestation, isolated CLI runtime, credential boundary, and preflight all pass.
 
 The regular `admin` and `readonly` profiles retain their existing tools:
