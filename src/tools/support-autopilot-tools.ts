@@ -58,8 +58,6 @@ const decisionInputSchema = leaseIdentitySchema.extend({
     .min(1)
     .max(2)
     .refine((keys) => new Set(keys).size === keys.length, "Evidence keys must be unique"),
-  expectedLatestMessageId: latestMessageIdSchema,
-  expectedTicketVersion: z.number().int().nonnegative().safe(),
   internalReasoning: boundedUtf8(2_000),
   proposedReply: boundedUtf8(4_000).nullable(),
   selectedPolicyId: policyIdSchema,
@@ -72,6 +70,13 @@ const decisionInputSchema = leaseIdentitySchema.extend({
     });
   }
 });
+const authoritativeContextSchema = z.object({
+  currentTicket: z.object({
+    automationVersion: z.number().int().nonnegative().safe(),
+    latestMessageId: latestMessageIdSchema,
+  }).passthrough(),
+  jobId: jobIdSchema,
+}).passthrough();
 const attachmentResponseSchema = z.object({
   dataBase64: z.string().min(1).max(Math.ceil((8 * 1024 * 1024) / 3) * 4),
   metadata: z.object({
@@ -116,10 +121,20 @@ function toolResponse(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
+function leaseTokenHash(leaseToken: string): string {
+  return createHash("sha256").update(leaseToken, "utf8").digest("hex");
+}
+
 export function registerSupportAutopilotTools(
   server: McpServer,
   client: SupportAutopilotClient,
 ): void {
+  const authoritativeContexts = new Map<string, {
+    expectedLatestMessageId: string;
+    expectedTicketVersion: number;
+    leaseTokenHash: string;
+    workerId: string;
+  }>();
   server.registerTool(
     "get_support_automation_work_availability",
     {
@@ -152,10 +167,14 @@ export function registerSupportAutopilotTools(
       inputSchema: leaseIdentitySchema,
       annotations: queueMutationAnnotations,
     },
-    async ({ jobId, leaseToken, workerId }) => toolResponse(await client.post(
-      `/support-automation/jobs/${jobId}/lease/renew`,
-      { leaseToken, workerId },
-    )),
+    async ({ jobId, leaseToken, workerId }) => {
+      const response = await client.post(
+        `/support-automation/jobs/${jobId}/lease/renew`,
+        { leaseToken, workerId },
+      );
+      authoritativeContexts.delete(jobId);
+      return toolResponse(response);
+    },
   );
 
   server.registerTool(
@@ -165,10 +184,24 @@ export function registerSupportAutopilotTools(
       inputSchema: leaseIdentitySchema,
       annotations: readOnlyAnnotations,
     },
-    async ({ jobId, leaseToken, workerId }) => toolResponse(await client.post(
-      `/support-automation/jobs/${jobId}/context`,
-      { leaseToken, workerId },
-    )),
+    async ({ jobId, leaseToken, workerId }) => {
+      authoritativeContexts.delete(jobId);
+      const raw = await client.post(
+        `/support-automation/jobs/${jobId}/context`,
+        { leaseToken, workerId },
+      );
+      const context = authoritativeContextSchema.parse(raw);
+      if (context.jobId !== jobId) {
+        throw new Error("Context response does not match job");
+      }
+      authoritativeContexts.set(jobId, {
+        expectedLatestMessageId: context.currentTicket.latestMessageId,
+        expectedTicketVersion: context.currentTicket.automationVersion,
+        leaseTokenHash: leaseTokenHash(leaseToken),
+        workerId,
+      });
+      return toolResponse(raw);
+    },
   );
 
   server.registerTool(
@@ -208,16 +241,33 @@ export function registerSupportAutopilotTools(
     {
       description: [
         "Record one structured shadow decision without customer or ticket mutation.",
-        "Pass exactly these top-level fields: workerId, jobId, leaseToken, decisionType, evidenceFactKeys, expectedLatestMessageId, expectedTicketVersion, internalReasoning, proposedReply, selectedPolicyId.",
+        "Read the current context first. The server binds the decision to its authoritative message and ticket version.",
+        "Pass exactly these top-level fields: workerId, jobId, leaseToken, decisionType, evidenceFactKeys, internalReasoning, proposedReply, selectedPolicyId.",
         "Do not add a decision object or aliases.",
       ].join(" "),
       inputSchema: decisionInputSchema,
       annotations: queueMutationAnnotations,
     },
-    async ({ jobId, ...body }) => toolResponse(await client.post(
-      `/support-automation/jobs/${jobId}/decision`,
-      body,
-    )),
+    async ({ jobId, ...body }) => {
+      const context = authoritativeContexts.get(jobId);
+      if (
+        !context
+        || context.workerId !== body.workerId
+        || context.leaseTokenHash !== leaseTokenHash(body.leaseToken)
+      ) {
+        throw new Error("Authoritative context is required before decision submission");
+      }
+      const response = await client.post(
+        `/support-automation/jobs/${jobId}/decision`,
+        {
+          ...body,
+          expectedLatestMessageId: context.expectedLatestMessageId,
+          expectedTicketVersion: context.expectedTicketVersion,
+        },
+      );
+      authoritativeContexts.delete(jobId);
+      return toolResponse(response);
+    },
   );
 
   server.registerTool(
