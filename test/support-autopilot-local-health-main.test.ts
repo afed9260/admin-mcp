@@ -104,10 +104,10 @@ describe("runSupportAutopilotLocalHealth", () => {
     });
   });
 
-  it("rejects missing or additional provider response fields", async () => {
+  it("rejects missing or malformed required provider response fields", async () => {
     for (const response of [
       { ...validHealth, activeLeases: undefined },
-      { ...validHealth, rawToken: "forbidden" },
+      { ...validHealth, claimsEnabled: "true" },
     ]) {
       await expect(runSupportAutopilotLocalHealth({}, {
         apiClientFactory: () => ({ get: vi.fn().mockResolvedValue(response) }),
@@ -115,6 +115,27 @@ describe("runSupportAutopilotLocalHealth", () => {
         secretProvider: { read: vi.fn().mockResolvedValue("raw-service-token") },
       })).rejects.toThrow("SUPPORT_AUTOPILOT_LOCAL_HEALTH_FAILED");
     }
+  });
+
+  it("accepts additive provider diagnostics without exposing them", async () => {
+    const response = {
+      ...validHealth,
+      level1: { actionRequestsByState: {} },
+      oldestQueuedAgeMs: null,
+      runnerAgeMs: 1_000,
+      runnerFresh: true,
+    };
+
+    const result = await runSupportAutopilotLocalHealth({}, {
+      apiClientFactory: () => ({ get: vi.fn().mockResolvedValue(response) }),
+      loadConfig: () => enabledConfig,
+      secretProvider: { read: vi.fn().mockResolvedValue("raw-service-token") },
+    });
+
+    expect(result.gatesReady).toBe(true);
+    expect(result).not.toHaveProperty("level1");
+    expect(result).not.toHaveProperty("oldestQueuedAgeMs");
+    expect(result).not.toHaveProperty("runnerAgeMs");
   });
 
   it("collapses credential and provider errors without leaking their messages", async () => {
