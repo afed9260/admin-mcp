@@ -113,7 +113,12 @@ describe("runCodexSupportDecision", () => {
     expect(input.stdin).toContain("Read the current context before submitting");
     expect(input.stdin).toContain("The MCP server binds the current message and ticket version");
     expect(input.stdin).toContain("never nest them under a decision object");
-    expect(input.stdin).not.toMatch(/leaseToken|proposedReply/i);
+    expect(input.stdin).toContain("only an acknowledgement, thanks, or apparent closure");
+    expect(input.stdin).toContain("decisionType=escalate");
+    expect(input.stdin).toContain("selectedPolicyId=unclassified.v1");
+    expect(input.stdin).toContain("proposedReply=null");
+    expect(input.stdin).toContain("Never invent a missing-reference question");
+    expect(input.stdin).not.toMatch(/leaseToken/i);
     expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
   });
 
