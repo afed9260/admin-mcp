@@ -2,6 +2,9 @@
 param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
   [string]$NodeExecutable = '',
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[0-9a-f]{40}$')]
+  [string]$ExpectedRuntimeRevision,
   [switch]$AllowPendingPromotion,
   [switch]$SupervisorOwnedLock,
   [switch]$PlanOnly
@@ -16,10 +19,10 @@ if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
-$SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
-. $SecurityScript
 $EntryPoint = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-shadow-main.js'
 $StateRoot = Join-Path $InstallRoot 'state'
+$ManifestMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-runtime-manifest-main.js'
+$ManifestPath = Join-Path $StateRoot 'runtime-manifest.json'
 $StatePath = Join-Path $StateRoot 'credential-rotation.json'
 $LockPath = Join-Path $StateRoot 'credential-rotation.lock'
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
@@ -31,6 +34,40 @@ $DrainRequestPath = Join-Path $StateRoot 'shadow-runner.drain'
 $StdinPath = Join-Path $StateRoot 'shadow-runner.stdin'
 $StdoutPath = Join-Path $StateRoot 'shadow-runner.stdout.log'
 $StderrPath = Join-Path $StateRoot 'shadow-runner.stderr.log'
+$SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
+
+if ($PlanOnly) {
+  [pscustomobject]@{
+    action = 'start'
+    executable = $NodeExecutable
+    expectedRuntimeRevision = $ExpectedRuntimeRevision
+    installRoot = $InstallRoot
+    planOnly = $true
+    stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
+  } | ConvertTo-Json -Compress
+  exit 0
+}
+
+try {
+  foreach ($requiredPath in @($NodeExecutable, $ManifestMain, $ManifestPath)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+      throw 'runtime verification input is missing'
+    }
+  }
+  & $NodeExecutable $ManifestMain verify `
+    --root $AdminMcpRoot `
+    --revision $ExpectedRuntimeRevision `
+    --manifest $ManifestPath 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'runtime manifest verification failed'
+  }
+}
+catch {
+  [Console]::Error.WriteLine('SUPPORT_AUTOPILOT_RUNNER_START_FAILED')
+  exit 1
+}
+
+. $SecurityScript
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
 
 trap {
@@ -55,20 +92,6 @@ function Get-SupportAutopilotRunnerProcess {
       $_.ExecutablePath -ieq $NodeExecutable -and
       $_.CommandLine -match $pattern
     })
-}
-
-$existing = @(Get-SupportAutopilotRunnerProcess)
-if ($PlanOnly) {
-  [pscustomobject]@{
-    action = 'start'
-    alreadyRunning = $existing.Count -gt 0
-    executable = $NodeExecutable
-    entryPoint = $EntryPoint
-    installRoot = $InstallRoot
-    planOnly = $true
-    stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
-  } | ConvertTo-Json -Compress
-  exit 0
 }
 
 if (-not (Test-Path -LiteralPath $StateRoot -PathType Container)) {

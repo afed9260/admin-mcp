@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
+  [string]$NodeExecutable = '',
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[0-9a-f]{40}$')]
+  [string]$ExpectedRuntimeRevision,
   [switch]$PlanOnly
 )
 
@@ -8,7 +12,13 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
+if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
+  $NodeExecutable = Join-Path $env:ProgramFiles 'nodejs\node.exe'
+}
+$NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
+$ManifestMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-runtime-manifest-main.js'
+$ManifestPath = Join-Path $InstallRoot 'state\runtime-manifest.json'
 $WatchdogScript = Join-Path $AdminMcpRoot 'scripts\start-support-autopilot-shadow-runner.ps1'
 $SupervisorScript = Join-Path $AdminMcpRoot 'scripts\invoke-support-autopilot-credential-supervisor.ps1'
 $WatchdogTaskName = 'Sdelka Support Autopilot Watchdog'
@@ -30,7 +40,8 @@ function New-TaskXml {
   $encodedSid = Escape-Xml $CurrentUserSid
   $encodedWorkingDirectory = Escape-Xml $AdminMcpRoot
   $arguments = '-WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
-    $ScriptPath + '" -InstallRoot "' + $InstallRoot + '"'
+    $ScriptPath + '" -InstallRoot "' + $InstallRoot + '" -ExpectedRuntimeRevision "' +
+    $ExpectedRuntimeRevision + '"'
   $encodedArguments = Escape-Xml $arguments
   return @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -114,6 +125,27 @@ if ($PlanOnly) {
     })
   } | ConvertTo-Json -Depth 5 -Compress
   exit 0
+}
+
+foreach ($requiredPath in @($NodeExecutable, $ManifestMain, $ManifestPath)) {
+  if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+    throw 'pinned runtime verification input is missing'
+  }
+}
+$currentRevision = (& git -C $AdminMcpRoot rev-parse HEAD 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $currentRevision -cne $ExpectedRuntimeRevision) {
+  throw 'runtime revision mismatch'
+}
+$workingTree = (& git -C $AdminMcpRoot status --porcelain --untracked-files=all 2>$null | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not [string]::IsNullOrEmpty($workingTree)) {
+  throw 'runtime checkout is not clean'
+}
+& $NodeExecutable $ManifestMain verify `
+  --root $AdminMcpRoot `
+  --revision $ExpectedRuntimeRevision `
+  --manifest $ManifestPath 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw 'runtime manifest verification failed'
 }
 
 foreach ($definition in $definitions) {

@@ -29,6 +29,40 @@ const validHealth = {
   deliveryUnknownCount: 0,
   generatedAt: "2026-08-06T09:00:00.000Z",
   jobCreationEnabled: true,
+  level1: {
+    actionRequestsByState: {
+      approved: { count: 0, oldestAgeMs: null },
+      awaiting_owner: { count: 2, oldestAgeMs: null },
+      regeneration_pending: { count: 0, oldestAgeMs: null },
+      executing: { count: 0, oldestAgeMs: null },
+      succeeded: { count: 4, oldestAgeMs: null },
+      superseded: { count: 0, oldestAgeMs: null },
+      expired: { count: 0, oldestAgeMs: null },
+      failed: { count: 1, oldestAgeMs: null },
+      delivery_unknown: { count: 0, oldestAgeMs: null },
+    },
+    automaticOutcomes: {
+      approved: 0,
+      awaiting_owner: 0,
+      regeneration_pending: 0,
+      executing: 0,
+      succeeded: 3,
+      superseded: 0,
+      expired: 0,
+      failed: 0,
+      delivery_unknown: 0,
+    },
+    initialByState: {
+      pending: { count: 2, oldestAgeMs: null },
+      leased: { count: 0, oldestAgeMs: null },
+      retry_wait: { count: 0, oldestAgeMs: null },
+      executing: { count: 0, oldestAgeMs: null },
+      completed: { count: 3, oldestAgeMs: null },
+      escalated: { count: 1, oldestAgeMs: null },
+      dead_letter: { count: 0, oldestAgeMs: null },
+      cancelled: { count: 0, oldestAgeMs: null },
+    },
+  },
   oldestPendingAgeMs: null,
   pendingJobs: 2,
   privacyAttestationId: "support-privacy-1",
@@ -51,6 +85,21 @@ describe("runSupportAutopilotLocalHealth", () => {
       secretProvider: { read },
     })).resolves.toEqual({
       activeLeases: 0,
+      automation: {
+        jobs: {
+          cancelled: 0,
+          completed: 3,
+          deadLetter: 0,
+          escalated: 1,
+          executing: 0,
+          leased: 0,
+          pending: 2,
+          retryWait: 0,
+        },
+        oldestPendingAgeMs: null,
+        routes: { automatic: 3, escalation: 1, owner: 2 },
+        sends: { deliveryUnknown: 0, failed: 1, sent: 4 },
+      },
       claimsEnabled: true,
       gatesReady: true,
       jobCreationEnabled: true,
@@ -108,6 +157,7 @@ describe("runSupportAutopilotLocalHealth", () => {
     for (const response of [
       { ...validHealth, activeLeases: undefined },
       { ...validHealth, claimsEnabled: "true" },
+      { ...validHealth, pendingJobs: 999 },
     ]) {
       await expect(runSupportAutopilotLocalHealth({}, {
         apiClientFactory: () => ({ get: vi.fn().mockResolvedValue(response) }),
@@ -120,7 +170,8 @@ describe("runSupportAutopilotLocalHealth", () => {
   it("accepts additive provider diagnostics without exposing them", async () => {
     const response = {
       ...validHealth,
-      level1: { actionRequestsByState: {} },
+      customerId: 123,
+      ticketId: "must-not-leak",
       oldestQueuedAgeMs: null,
       runnerAgeMs: 1_000,
       runnerFresh: true,
@@ -136,6 +187,8 @@ describe("runSupportAutopilotLocalHealth", () => {
     expect(result).not.toHaveProperty("level1");
     expect(result).not.toHaveProperty("oldestQueuedAgeMs");
     expect(result).not.toHaveProperty("runnerAgeMs");
+    expect(result).not.toHaveProperty("customerId");
+    expect(result).not.toHaveProperty("ticketId");
   });
 
   it("collapses credential and provider errors without leaking their messages", async () => {

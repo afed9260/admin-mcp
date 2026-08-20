@@ -12,6 +12,7 @@
     "support-autopilot:credential-supervisor": "node dist/runner/support-autopilot-credential-supervisor-main.js",
     "support-autopilot:local-health": "node dist/runner/support-autopilot-local-health-main.js",
     "support-autopilot:runtime-manifest": "node dist/runner/support-autopilot-runtime-manifest-main.js",
+    "support-autopilot:status": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/get-support-autopilot-status.ps1",
     "support-autopilot:shadow": "node dist/runner/support-autopilot-shadow-main.js",
     "support-autopilot:synthetic-canary": "node dist/synthetic/support-autopilot-synthetic-canary-main.js",
     "test": "vitest run",

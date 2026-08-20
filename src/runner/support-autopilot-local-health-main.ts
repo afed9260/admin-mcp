@@ -16,6 +16,42 @@ const canonicalIso = z.string().refine((value) => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
 });
 const counter = z.number().int().nonnegative().safe();
+const healthBucket = z.object({
+  count: counter,
+  oldestAgeMs: counter.nullable(),
+}).strip();
+const actionStates = z.object({
+  approved: healthBucket,
+  awaiting_owner: healthBucket,
+  regeneration_pending: healthBucket,
+  executing: healthBucket,
+  succeeded: healthBucket,
+  superseded: healthBucket,
+  expired: healthBucket,
+  failed: healthBucket,
+  delivery_unknown: healthBucket,
+}).strip();
+const automaticOutcomes = z.object({
+  approved: counter,
+  awaiting_owner: counter,
+  regeneration_pending: counter,
+  executing: counter,
+  succeeded: counter,
+  superseded: counter,
+  expired: counter,
+  failed: counter,
+  delivery_unknown: counter,
+}).strip();
+const initialStates = z.object({
+  pending: healthBucket,
+  leased: healthBucket,
+  retry_wait: healthBucket,
+  executing: healthBucket,
+  completed: healthBucket,
+  escalated: healthBucket,
+  dead_letter: healthBucket,
+  cancelled: healthBucket,
+}).strip();
 const RUNNER_HEARTBEAT_MAX_AGE_MS = 60_000;
 const healthSchema = z.object({
   activeLeases: counter,
@@ -24,6 +60,11 @@ const healthSchema = z.object({
   deliveryUnknownCount: counter,
   generatedAt: canonicalIso,
   jobCreationEnabled: z.boolean(),
+  level1: z.object({
+    actionRequestsByState: actionStates,
+    automaticOutcomes,
+    initialByState: initialStates,
+  }).strip(),
   oldestPendingAgeMs: counter.nullable(),
   pendingJobs: counter,
   privacyAttestationId: z.string().min(1).max(128).nullable(),
@@ -36,6 +77,21 @@ const healthSchema = z.object({
 
 export interface SupportAutopilotLocalHealth {
   activeLeases: number;
+  automation: {
+    jobs: {
+      cancelled: number;
+      completed: number;
+      deadLetter: number;
+      escalated: number;
+      executing: number;
+      leased: number;
+      pending: number;
+      retryWait: number;
+    };
+    oldestPendingAgeMs: number | null;
+    routes: { automatic: number; escalation: number; owner: number };
+    sends: { deliveryUnknown: number; failed: number; sent: number };
+  };
   claimsEnabled: boolean;
   gatesReady: boolean;
   jobCreationEnabled: boolean;
@@ -84,9 +140,46 @@ export async function runSupportAutopilotLocalHealth(
       && runnerFresh
       && health.shadowModeEnabled
       && health.privacyAttestationId === config.privacyAttestationId;
+    if (
+      health.pendingJobs !== health.level1.initialByState.pending.count
+      || health.retryWaitJobs !== health.level1.initialByState.retry_wait.count
+      || health.deadLetters !== health.level1.initialByState.dead_letter.count
+      || health.deliveryUnknownCount
+        !== health.level1.actionRequestsByState.delivery_unknown.count
+    ) {
+      throw new Error("aggregate health counters disagree");
+    }
+    const automatic = Object.values(health.level1.automaticOutcomes)
+      .reduce((total, value) => total + value, 0);
+    if (!Number.isSafeInteger(automatic)) {
+      throw new Error("aggregate automatic counter overflow");
+    }
 
     return {
       activeLeases: health.activeLeases,
+      automation: {
+        jobs: {
+          cancelled: health.level1.initialByState.cancelled.count,
+          completed: health.level1.initialByState.completed.count,
+          deadLetter: health.level1.initialByState.dead_letter.count,
+          escalated: health.level1.initialByState.escalated.count,
+          executing: health.level1.initialByState.executing.count,
+          leased: health.level1.initialByState.leased.count,
+          pending: health.level1.initialByState.pending.count,
+          retryWait: health.level1.initialByState.retry_wait.count,
+        },
+        oldestPendingAgeMs: health.oldestPendingAgeMs,
+        routes: {
+          automatic,
+          escalation: health.level1.initialByState.escalated.count,
+          owner: health.level1.actionRequestsByState.awaiting_owner.count,
+        },
+        sends: {
+          deliveryUnknown: health.level1.actionRequestsByState.delivery_unknown.count,
+          failed: health.level1.actionRequestsByState.failed.count,
+          sent: health.level1.actionRequestsByState.succeeded.count,
+        },
+      },
       claimsEnabled: health.claimsEnabled,
       gatesReady,
       jobCreationEnabled: health.jobCreationEnabled,

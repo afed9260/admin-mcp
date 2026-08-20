@@ -14,8 +14,22 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+const runtimeRevision = "0123456789abcdef0123456789abcdef01234567";
+
 function script(name: string): string {
   return readFileSync(path.resolve("scripts", name), "utf8");
+}
+
+function writeFakeRuntimeVerifier(runnerRoot: string, stateRoot: string): void {
+  writeFileSync(
+    path.join(runnerRoot, "support-autopilot-runtime-manifest-main.js"),
+    [
+      "if (process.argv[2] !== 'verify') process.exit(1);",
+      `process.stdout.write(JSON.stringify({ outcome: 'verified', revision: '${runtimeRevision}', fileCount: 1 }) + '\\n');`,
+    ].join("\n"),
+    "utf8",
+  );
+  writeFileSync(path.join(stateRoot, "runtime-manifest.json"), "{}", "utf8");
 }
 
 describe("Windows support autopilot lifecycle scripts", () => {
@@ -70,6 +84,12 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("SUPPORT_AUTOPILOT_RUNNER_START_FAILED");
     expect(source).not.toMatch(/Write-(?:Host|Output).*token/i);
     expect(source).toContain("[switch]$PlanOnly");
+    expect(source).toContain("[string]$ExpectedRuntimeRevision");
+    expect(source).toContain("support-autopilot-runtime-manifest-main.js");
+    expect(source).toContain("--revision $ExpectedRuntimeRevision");
+    expect(source.indexOf("support-autopilot-runtime-manifest-main.js")).toBeLessThan(
+      source.indexOf("$existing = @(Get-SupportAutopilotRunnerProcess)"),
+    );
     expect(source).toContain("-StopTimeoutSeconds 720");
     expect(source).not.toContain("-ForceAfterTimeout | Out-Null");
   });
@@ -95,7 +115,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
       "start-support-autopilot-shadow-runner.ps1",
       "stop-support-autopilot-shadow-runner.ps1",
     ]) {
-      const result = spawnSync("powershell.exe", [
+      const args = [
         "-NoProfile",
         "-NonInteractive",
         "-ExecutionPolicy",
@@ -105,10 +125,49 @@ describe("Windows support autopilot lifecycle scripts", () => {
         "-InstallRoot",
         path.resolve("test", "fixtures", "support-autopilot-install"),
         "-PlanOnly",
-      ], { encoding: "utf8", windowsHide: true });
+      ];
+      if (name === "start-support-autopilot-shadow-runner.ps1") {
+        args.push("-ExpectedRuntimeRevision", runtimeRevision);
+      }
+      const result = spawnSync("powershell.exe", args, { encoding: "utf8", windowsHide: true });
 
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout.trim())).toMatchObject({ planOnly: true });
+    }
+  });
+
+  windowsIt("fails closed before runtime mutation when the pinned manifest is rejected", () => {
+    const installRoot = mkdtempSync(path.join(os.tmpdir(), "support-autopilot-manifest-fail-"));
+    const runnerRoot = path.join(installRoot, "admin-mcp", "dist", "runner");
+    const stateRoot = path.join(installRoot, "state");
+    mkdirSync(runnerRoot, { recursive: true });
+    mkdirSync(stateRoot, { recursive: true });
+    writeFileSync(
+      path.join(runnerRoot, "support-autopilot-runtime-manifest-main.js"),
+      "process.exit(1);\n",
+      "utf8",
+    );
+    writeFileSync(path.join(stateRoot, "runtime-manifest.json"), "{}", "utf8");
+    try {
+      for (const name of [
+        "start-support-autopilot-shadow-runner.ps1",
+        "invoke-support-autopilot-credential-supervisor.ps1",
+      ]) {
+        const result = spawnSync("powershell.exe", [
+          "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+          "-File", path.resolve("scripts", name),
+          "-InstallRoot", installRoot,
+          "-NodeExecutable", process.execPath,
+          "-ExpectedRuntimeRevision", runtimeRevision,
+        ], { encoding: "utf8", windowsHide: true });
+        expect(result.status).toBe(1);
+        expect(result.stderr.trim()).toMatch(
+          /^SUPPORT_AUTOPILOT_(?:RUNNER_START|CREDENTIAL_SUPERVISOR)_FAILED$/,
+        );
+        expect(readdirSync(stateRoot)).toEqual(["runtime-manifest.json"]);
+      }
+    } finally {
+      rmSync(installRoot, { force: true, recursive: true });
     }
   });
 
@@ -200,6 +259,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
       path.join(fixtures, "fake-health.cjs"),
       path.join(runnerRoot, "support-autopilot-local-health-main.js"),
     );
+    writeFakeRuntimeVerifier(runnerRoot, stateRoot);
     for (const name of [
       "new-support-autopilot-credential.ps1",
       "start-support-autopilot-shadow-runner.ps1",
@@ -266,6 +326,8 @@ describe("Windows support autopilot lifecycle scripts", () => {
         installRoot,
         "-NodeExecutable",
         process.execPath,
+        "-ExpectedRuntimeRevision",
+        runtimeRevision,
         "-GitHubCliPath",
         path.join(fixtures, "fake-gh.cmd"),
       ], {
@@ -329,6 +391,8 @@ describe("Windows support autopilot lifecycle scripts", () => {
         installRoot,
         "-NodeExecutable",
         process.execPath,
+        "-ExpectedRuntimeRevision",
+        runtimeRevision,
         "-GitHubCliPath",
         path.join(fixtures, "fake-gh.cmd"),
       ], {
@@ -409,6 +473,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
       "  shadowModeEnabled: true",
       "}) + '\\n');",
     ].join("\n"), "utf8");
+    writeFakeRuntimeVerifier(runnerRoot, stateRoot);
     for (const name of [
       "new-support-autopilot-credential.ps1",
       "start-support-autopilot-shadow-runner.ps1",
@@ -466,6 +531,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
         "-File", path.resolve("scripts", "invoke-support-autopilot-credential-supervisor.ps1"),
         "-InstallRoot", installRoot,
         "-NodeExecutable", process.execPath,
+        "-ExpectedRuntimeRevision", runtimeRevision,
         "-GitHubCliPath", path.join(fixtures, "fake-gh.cmd"),
       ], {
         encoding: "utf8",
@@ -741,7 +807,12 @@ describe("Windows support autopilot lifecycle scripts", () => {
     expect(source).toContain("Register-ScheduledTask");
     expect(source).toContain("[xml](New-TaskXml");
     expect(source).toMatch(/\$arguments\s*=\s*'-WindowStyle Hidden /);
+    expect(source).toContain("-ExpectedRuntimeRevision");
+    expect(source).toContain("rev-parse HEAD");
+    expect(source).toContain("status --porcelain");
+    expect(source).toContain("support-autopilot-runtime-manifest-main.js");
     expect(source).not.toMatch(/-Password\b/i);
+    expect(source).not.toMatch(/credential=.*|auth\.json/i);
     expect(source).toContain("[switch]$PlanOnly");
   });
 
@@ -751,6 +822,11 @@ describe("Windows support autopilot lifecycle scripts", () => {
 
     expect(source).toContain("$script:FailureStage = 'initialization'");
     expect(source).toContain("$script:FailureStage = 'queue_health'");
+    expect(source).toContain("[string]$ExpectedRuntimeRevision");
+    expect(source.indexOf("& $NodeExecutable $ManifestMain verify")).toBeLessThan(
+      source.indexOf("Get-CimInstance -ClassName Win32_Process"),
+    );
+    expect(source).toContain("'-ExpectedRuntimeRevision', $ExpectedRuntimeRevision");
     expect(trapBlock).toContain("-Stage $script:FailureStage");
     expect(trapBlock).not.toContain("$_.Exception.Message");
   });
