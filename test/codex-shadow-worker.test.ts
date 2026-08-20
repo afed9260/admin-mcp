@@ -53,7 +53,8 @@ describe("CodexShadowWorker", () => {
     const input = processRunner.run.mock.calls[0][0] as CodexProcessInput;
     expect(input.stdin).toContain("support-shadow.1");
     expect(input.stdin).toContain("Read the current context before submitting");
-    expect(input.stdin).not.toMatch(/leaseToken|proposedReply/i);
+    expect(input.stdin).toContain("proposedReply=null");
+    expect(input.stdin).not.toMatch(/leaseToken/i);
     expect(input.args).toContain("read-only");
     expect(input.maxOutputBytes).toBe(16 * 1024 * 1024);
     expect(JSON.stringify(events)).not.toMatch(/stdout|stderr|prompt|ticket|message|lease|reply/i);

@@ -87,6 +87,8 @@ export function buildSupportAutopilotWorkerPrompt(workerId: string): string {
     "Read the current context before submitting a decision.",
     "The MCP server binds the current message and ticket version; do not supply those fence fields yourself.",
     "Call submit_support_automation_decision with all schema fields as top-level arguments; never nest them under a decision object.",
+    "If the newest customer turn is only an acknowledgement, thanks, or apparent closure and the current context contains no new unresolved request, submit decisionType=escalate, selectedPolicyId=unclassified.v1, and proposedReply=null.",
+    "State briefly that no executable reply is required. Never invent a missing-reference question for that turn.",
     "Submit exactly one shadow decision, never send or promise a customer action, then stop.",
     "Do not repeat customer content or tool results in your final output.",
   ].join(" ");

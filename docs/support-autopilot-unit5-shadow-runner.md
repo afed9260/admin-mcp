@@ -113,15 +113,19 @@ Build the reviewed checkout and inspect the no-mutation plans first:
 
 ```powershell
 corepack pnpm verify
+$runtimeRevision = (git rev-parse HEAD).Trim()
 
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
-  scripts/start-support-autopilot-shadow-runner.ps1 -PlanOnly
+  scripts/start-support-autopilot-shadow-runner.ps1 `
+  -ExpectedRuntimeRevision $runtimeRevision -PlanOnly
 
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
-  scripts/invoke-support-autopilot-credential-supervisor.ps1 -PlanOnly
+  scripts/invoke-support-autopilot-credential-supervisor.ps1 `
+  -ExpectedRuntimeRevision $runtimeRevision -PlanOnly
 
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
-  scripts/install-support-autopilot-scheduled-tasks.ps1 -PlanOnly
+  scripts/install-support-autopilot-scheduled-tasks.ps1 `
+  -ExpectedRuntimeRevision $runtimeRevision -PlanOnly
 ```
 
 The rotation journal is non-secret and contains only stages, UUIDs, hashes,
@@ -138,14 +142,60 @@ Install the tasks only after the initial journal contains the active
 credential's hash-free issue and expiry timestamps:
 
 ```powershell
+$installRoot = Join-Path $env:USERPROFILE '.sdelka-support-autopilot'
+$adminMcpRoot = Join-Path $installRoot 'admin-mcp'
+$manifestPath = Join-Path $installRoot 'state\runtime-manifest.json'
+$runtimeRevision = (git -C $adminMcpRoot rev-parse HEAD).Trim()
+
+corepack pnpm --dir $adminMcpRoot verify
+& (Join-Path $env:ProgramFiles 'nodejs\node.exe') `
+  (Join-Path $adminMcpRoot 'dist\runner\support-autopilot-runtime-manifest-main.js') `
+  create --root $adminMcpRoot --revision $runtimeRevision --output $manifestPath
+& (Join-Path $env:ProgramFiles 'nodejs\node.exe') `
+  (Join-Path $adminMcpRoot 'dist\runner\support-autopilot-runtime-manifest-main.js') `
+  verify --root $adminMcpRoot --revision $runtimeRevision --manifest $manifestPath
+
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
-  scripts/install-support-autopilot-scheduled-tasks.ps1
+  (Join-Path $adminMcpRoot 'scripts\install-support-autopilot-scheduled-tasks.ps1') `
+  -InstallRoot $installRoot -ExpectedRuntimeRevision $runtimeRevision
 ```
 
 Export and inspect both task definitions after installation. Their arguments
-must contain only the reviewed script path and install root. The definitions
+must contain only the reviewed script path, install root, and exact runtime
+revision. The definitions
 must contain `InteractiveToken`, `LeastPrivilege`, `IgnoreNew`, and
 `StartWhenAvailable`, with five-minute and fifteen-minute repetition respectively.
+
+Read the complete local state through one redacted command:
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+  (Join-Path $adminMcpRoot 'scripts\get-support-autopilot-status.ps1') `
+  -InstallRoot $installRoot -ExpectedRuntimeRevision $runtimeRevision
+```
+
+The result contains only task readiness, exact runner count and revision,
+backend readiness, manifest state, and aggregate job, route, and send counters.
+It contains no customer, ticket, message, recipient, provider, process, or
+credential identifier and no path, command line, URL, raw error, or secret.
+
+Before accepting the scheduled lifecycle, run the watchdog on demand three
+times and observe the desktop during each bounded launch:
+
+```powershell
+1..3 | ForEach-Object {
+  Start-ScheduledTask -TaskName 'Sdelka Support Autopilot Watchdog'
+  Start-Sleep -Seconds 10
+  powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
+    (Join-Path $adminMcpRoot 'scripts\get-support-autopilot-status.ps1') `
+    -InstallRoot $installRoot -ExpectedRuntimeRevision $runtimeRevision
+}
+```
+
+Every run must show `outcome=ready`, `manifest=verified`, `runnerCount=1`,
+both tasks ready, and no visible console window. A manifest mismatch stops the
+watchdog and credential supervisor before process discovery, credential reads,
+state writes, or rotation dispatch. It never triggers credential rotation.
 
 The supervisor requires all queue, privacy, attestation, and runner gates before
 starting a normal rotation. It checks `activeLeases` before stopping the runner,
@@ -188,6 +238,13 @@ To remove only these two tasks without touching credentials or runner state:
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `
   scripts/uninstall-support-autopilot-scheduled-tasks.ps1
 ```
+
+For recovery, keep both tasks uninstalled, restore the reviewed checkout with a
+fast-forward update to the intended revision, require a clean `git status`, run
+the full build and tests, create a new manifest for that exact revision, verify
+it, inspect the three plan-only commands, and reinstall the same two tasks.
+Never edit the manifest by hand and never bypass a mismatch by changing the
+expected revision in an existing task.
 
 This mode is not an unattended Windows service. The computer must be powered
 on, online, and logged into the same Windows account. A locked session is

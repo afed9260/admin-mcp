@@ -2,6 +2,9 @@
 param(
   [string]$InstallRoot = (Join-Path $env:USERPROFILE '.sdelka-support-autopilot'),
   [string]$NodeExecutable = '',
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[0-9a-f]{40}$')]
+  [string]$ExpectedRuntimeRevision,
   [string]$GitHubCliPath = 'gh.exe',
   [switch]$ForceRotation,
   [string]$ConfirmForceRotation = '',
@@ -24,9 +27,7 @@ if ([string]::IsNullOrWhiteSpace($NodeExecutable)) {
 $NodeExecutable = [IO.Path]::GetFullPath($NodeExecutable)
 $AdminMcpRoot = Join-Path $InstallRoot 'admin-mcp'
 $SecurityScript = Join-Path $PSScriptRoot 'support-autopilot-windows-security.ps1'
-. $SecurityScript
 $ProcessHelperScript = Join-Path $PSScriptRoot 'support-autopilot-windows-process-helper.ps1'
-. $ProcessHelperScript
 $CredentialRoot = Join-Path $InstallRoot 'credentials'
 $ActiveCredentialPath = Join-Path $CredentialRoot 'support-autopilot.dpapi'
 $RollbackCredentialPath = Join-Path $CredentialRoot 'support-autopilot.rollback.dpapi'
@@ -40,6 +41,43 @@ $StartScript = Join-Path $AdminMcpRoot 'scripts\start-support-autopilot-shadow-r
 $StopScript = Join-Path $AdminMcpRoot 'scripts\stop-support-autopilot-shadow-runner.ps1'
 $CredentialGenerator = Join-Path $AdminMcpRoot 'scripts\new-support-autopilot-credential.ps1'
 $InventoryPath = Join-Path $StateRoot 'credential-workflow-runs.json'
+$ManifestMain = Join-Path $AdminMcpRoot 'dist\runner\support-autopilot-runtime-manifest-main.js'
+$ManifestPath = Join-Path $StateRoot 'runtime-manifest.json'
+
+if ($PlanOnly) {
+  [pscustomobject]@{
+    action = 'credential-supervisor'
+    expectedRuntimeRevision = $ExpectedRuntimeRevision
+    forceRotation = [bool]$ForceRotation
+    installRoot = $InstallRoot
+    planOnly = $true
+    stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
+    workflowRef = $WorkflowRef
+  } | ConvertTo-Json -Compress
+  exit 0
+}
+
+try {
+  foreach ($requiredPath in @($NodeExecutable, $ManifestMain, $ManifestPath)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+      throw 'runtime verification input is missing'
+    }
+  }
+  & $NodeExecutable $ManifestMain verify `
+    --root $AdminMcpRoot `
+    --revision $ExpectedRuntimeRevision `
+    --manifest $ManifestPath 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw 'runtime manifest verification failed'
+  }
+}
+catch {
+  [Console]::Error.WriteLine('SUPPORT_AUTOPILOT_CREDENTIAL_SUPERVISOR_FAILED')
+  exit 1
+}
+
+. $SecurityScript
+. $ProcessHelperScript
 $EventPath = Join-Path $StateRoot $script:SupportAutopilotEventFileName
 $script:FailureStage = 'initialization'
 
@@ -247,6 +285,7 @@ function Start-Runner {
     '-File', ('"' + $StartScript + '"'),
     '-InstallRoot', ('"' + $InstallRoot + '"'),
     '-NodeExecutable', ('"' + $NodeExecutable + '"'),
+    '-ExpectedRuntimeRevision', $ExpectedRuntimeRevision,
     '-SupervisorOwnedLock'
   )
   if ($PromotionMode) {
@@ -631,17 +670,6 @@ function Assert-CandidateDigest {
   ) | Out-Null
 }
 
-if ($PlanOnly) {
-  [pscustomobject]@{
-    action = 'credential-supervisor'
-    forceRotation = [bool]$ForceRotation
-    installRoot = $InstallRoot
-    planOnly = $true
-    stateExists = Test-Path -LiteralPath $StatePath -PathType Leaf
-    workflowRef = $WorkflowRef
-  } | ConvertTo-Json -Compress
-  exit 0
-}
 if ($ForceRotation -and $ConfirmForceRotation -ne 'rotate-support-autopilot-credential') {
   throw 'force_rotation_not_confirmed'
 }
