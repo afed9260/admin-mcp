@@ -586,6 +586,25 @@ export const lifecycleMarketingSegmentUsersQuerySchema = z
   .strict();
 
 export type FunnelQuery = z.infer<typeof funnelQuerySchema>;
+export const productBacklogKeySchema = z.string().trim().regex(/^[a-z0-9][a-z0-9-]{0,127}$/);
+export const productBacklogListSchema = z.object({ includeArchived: z.boolean().default(false) }).strict();
+export const productBacklogByKeySchema = z.object({ backlogKey: productBacklogKeySchema }).strict();
+export const productBacklogEvidenceUpsertSchema = z.object({
+  backlogKey: productBacklogKeySchema,
+  title: z.string().trim().min(1).max(250),
+  itemType: z.enum(["initiative", "feature", "task", "bug", "research", "design", "tech_debt"]),
+  productArea: z.enum([
+    "mobile", "backend", "web", "ai_agent", "billing", "integrations", "operations", "design", "cross_product",
+  ]),
+  description: z.string().trim().min(1).max(10000),
+  evidence: z.array(z.string().trim().min(1).max(500).regex(/^[^\r\n]+$/)).min(1).max(30),
+  confirm: z.literal(true),
+  reason: z.string().trim().min(1).max(1000),
+}).strict();
+
+export type ProductBacklogList = z.infer<typeof productBacklogListSchema>;
+export type ProductBacklogByKey = z.infer<typeof productBacklogByKeySchema>;
+export type ProductBacklogEvidenceUpsert = z.infer<typeof productBacklogEvidenceUpsertSchema>;
 export type CostQuery = z.infer<typeof costQuerySchema>;
 export type BotFunnelQuery = z.infer<typeof botFunnelQuerySchema>;
 export type BotFunnelCustomersQuery = z.infer<typeof botFunnelCustomersQuerySchema>;

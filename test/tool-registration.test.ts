@@ -74,6 +74,8 @@ describe("readonlyToolNames", () => {
       "get_customer_operations_profile",
       "get_customer_billing_reconciliation",
       "list_referral_manual_review_items",
+      "list_product_backlog_items",
+      "get_product_backlog_item_by_key",
       "list_reactivation_campaign_runs",
       "list_reactivation_campaign_audience",
       "get_reactivation_campaign_state",
@@ -112,6 +114,7 @@ describe("writeToolNames", () => {
       "apply_successful_dialog_existing_slot_recovery",
       "approve_referral_manual_review_grant",
       "reject_referral_manual_review_grant",
+      "upsert_product_backlog_evidence",
     ]);
     expect(writeToolNames).not.toContain("investigate_support_ticket");
   });
@@ -210,6 +213,62 @@ describe("createAdminMcpServer", () => {
         openWorldHint: true,
       });
     }
+  });
+
+  it("keeps backlog reads available while write requires the admin write gate and audits a confirmed result", async () => {
+    const disabled = await connect(createAdminMcpServer(config));
+    const disabledNames = (await disabled.listTools()).tools.map((tool) => tool.name);
+    expect(disabledNames).toContain("list_product_backlog_items");
+    expect(disabledNames).toContain("get_product_backlog_item_by_key");
+    expect(disabledNames).not.toContain("upsert_product_backlog_evidence");
+
+    const dir = await mkdtemp(join(tmpdir(), "admin-mcp-backlog-audit-"));
+    const auditLogPath = join(dir, "audit.jsonl");
+    const server = new McpServer({ name: "admin-mcp-backlog-test", version: "0.0.0" });
+    const client = {
+      get: vi.fn(async () => ({ data: { item: null } })),
+      post: vi.fn(async () => ({ data: { action: "created", item: { id: "new-id" } } })),
+    } as unknown as AdminApiClient;
+    registerAdminTools(server, client, { ...config, auditLogPath, enableWriteTools: true });
+    const enabled = await connect(server);
+    const invalid = await enabled.callTool({
+      name: "upsert_product_backlog_evidence",
+      arguments: { backlogKey: "branch-triage", confirm: false },
+    });
+    expect(invalid.isError).toBe(true);
+    expect(client.post).not.toHaveBeenCalled();
+
+    const result = await enabled.callTool({
+      name: "upsert_product_backlog_evidence",
+      arguments: {
+        backlogKey: "branch-triage", title: "Разобрать ветки", itemType: "tech_debt",
+        productArea: "cross_product", description: "Описание", evidence: ["report.md"],
+        confirm: true, reason: "Проверено",
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(client.post).toHaveBeenCalledTimes(1);
+    const auditLog = await readFile(auditLogPath, "utf8");
+    expect(auditLog).toContain('"backlogKey":"branch-triage"');
+    expect(auditLog).toContain('"action":"created"');
+    expect(auditLog).not.toContain("Описание");
+  });
+
+  it("does not expose an upstream failure message in backlog tool output or audit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "admin-mcp-backlog-error-"));
+    const auditLogPath = join(dir, "audit.jsonl");
+    const server = new McpServer({ name: "admin-mcp-backlog-error-test", version: "0.0.0" });
+    const client = {
+      get: vi.fn(async () => { throw new Error("secret-token raw upstream details"); }),
+    } as unknown as AdminApiClient;
+    registerReadOnlyTools(server, client, { ...config, auditLogPath, profile: "readonly" });
+    const mcpClient = await connect(server);
+    const result = await mcpClient.callTool({
+      name: "get_product_backlog_item_by_key", arguments: { backlogKey: "branch-triage" },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("secret-token");
+    expect(await readFile(auditLogPath, "utf8")).not.toContain("secret-token");
   });
 
   it("publishes guarded support action batch as a write tool only when write tools are enabled", async () => {
