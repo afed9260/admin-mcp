@@ -244,6 +244,7 @@ describe("createAdminMcpServer", () => {
         backlogKey: "branch-triage", title: "Разобрать ветки", itemType: "tech_debt",
         productArea: "cross_product", description: "Описание", evidence: ["report.md"],
         confirm: true, reason: "Проверено",
+        semanticReviewConfirmed: true, reviewFingerprint: "a".repeat(64),
       },
     });
     expect(result.isError).not.toBe(true);
@@ -270,6 +271,7 @@ describe("createAdminMcpServer", () => {
         backlogKey: "branch-triage", title: "Разобрать ветки", itemType: "tech_debt",
         productArea: "cross_product", description: "Описание", evidence: ["report.md"],
         confirm: true, reason: "Проверено",
+        semanticReviewConfirmed: true, reviewFingerprint: "a".repeat(64),
       },
     });
     expect(result.isError).toBe(true);

@@ -223,11 +223,12 @@ function safeToolError(toolName: ToolName, error: unknown): unknown {
 
 function auditInput(toolName: ToolName, input: unknown): unknown {
   if (toolName === "upsert_product_backlog_evidence" && input && typeof input === "object") {
-    const body = input as { backlogKey?: unknown; evidence?: unknown; reason?: unknown };
+    const body = input as { backlogKey?: unknown; evidence?: unknown; reason?: unknown; reviewFingerprint?: unknown };
     return {
       backlogKey: body.backlogKey,
       evidenceCount: Array.isArray(body.evidence) ? body.evidence.length : 0,
       reason: body.reason,
+      reviewFingerprint: body.reviewFingerprint,
     };
   }
   if (toolName !== "upload_nudge_photo" || !input || typeof input !== "object") {
@@ -1257,7 +1258,7 @@ function registerTools(
   server.registerTool(
     "upsert_product_backlog_evidence",
     {
-      description: "Add evidence to an exact existing product backlog item or create one inbox item. Requires confirm=true and reason; never changes existing priority, status, or owner.",
+      description: "Add evidence to an exact existing product backlog item or create one inbox item. Creation additionally requires semanticReviewConfirmed=true and a fresh reviewFingerprint from the complete includeArchived=true list, after manual semantic comparison. Never changes existing priority, status, or owner.",
       inputSchema: inputSchema(productBacklogEvidenceUpsertSchema),
       annotations: writeAnnotations,
     },

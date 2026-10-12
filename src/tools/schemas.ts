@@ -600,7 +600,12 @@ export const productBacklogEvidenceUpsertSchema = z.object({
   evidence: z.array(z.string().trim().min(1).max(500).regex(/^[^\r\n]+$/)).min(1).max(30),
   confirm: z.literal(true),
   reason: z.string().trim().min(1).max(1000),
-}).strict();
+  semanticReviewConfirmed: z.literal(true).optional(),
+  reviewFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+}).strict().refine(
+  (body) => (body.semanticReviewConfirmed === undefined) === (body.reviewFingerprint === undefined),
+  { message: "Semantic review confirmation and fingerprint must be supplied together" },
+);
 
 export type ProductBacklogList = z.infer<typeof productBacklogListSchema>;
 export type ProductBacklogByKey = z.infer<typeof productBacklogByKeySchema>;

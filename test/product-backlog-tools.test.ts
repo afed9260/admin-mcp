@@ -17,6 +17,8 @@ describe("product backlog tools", () => {
     evidence: ["report.md"],
     confirm: true,
     reason: "Аудит",
+    semanticReviewConfirmed: true,
+    reviewFingerprint: "a".repeat(64),
   };
 
   it("uses only fixed read and write endpoints", async () => {
@@ -39,6 +41,8 @@ describe("product backlog tools", () => {
     expect(() => productBacklogEvidenceUpsertSchema.parse({ ...body, confirm: false })).toThrow();
     expect(() => productBacklogEvidenceUpsertSchema.parse({ ...body, priority: "p0" })).toThrow();
     expect(() => productBacklogEvidenceUpsertSchema.parse({ ...body, reason: " " })).toThrow();
+    expect(() => productBacklogEvidenceUpsertSchema.parse({ ...body, reviewFingerprint: "stale" })).toThrow();
+    expect(() => productBacklogEvidenceUpsertSchema.parse({ ...body, semanticReviewConfirmed: false })).toThrow();
     const client = { post: vi.fn() } as unknown as AdminApiClient;
     expect(() => createProductBacklogTools(client).upsertEvidence({ ...body, confirm: false })).toThrow();
     expect(client.post).not.toHaveBeenCalled();
