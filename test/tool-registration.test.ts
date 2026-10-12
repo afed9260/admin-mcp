@@ -252,6 +252,28 @@ describe("createAdminMcpServer", () => {
     expect(auditLog).toContain('"backlogKey":"branch-triage"');
     expect(auditLog).toContain('"action":"created"');
     expect(auditLog).not.toContain("Описание");
+    expect(auditLog).toContain('"status":"attempt"');
+    expect(auditLog).toContain('"reason":"Проверено"');
+  });
+
+  it("does not send a backlog mutation when the audit log cannot be written", async () => {
+    const server = new McpServer({ name: "admin-mcp-backlog-audit-failure", version: "0.0.0" });
+    const client = { post: vi.fn(async () => ({ data: { action: "created" } })) } as unknown as AdminApiClient;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    registerAdminTools(server, client, {
+      ...config, auditLogPath: "\0bad-audit-path", enableWriteTools: true,
+    });
+    const mcpClient = await connect(server);
+    const result = await mcpClient.callTool({
+      name: "upsert_product_backlog_evidence",
+      arguments: {
+        backlogKey: "branch-triage", title: "Разобрать ветки", itemType: "tech_debt",
+        productArea: "cross_product", description: "Описание", evidence: ["report.md"],
+        confirm: true, reason: "Проверено",
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(client.post).not.toHaveBeenCalled();
   });
 
   it("does not expose an upstream failure message in backlog tool output or audit", async () => {

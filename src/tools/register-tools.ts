@@ -223,8 +223,12 @@ function safeToolError(toolName: ToolName, error: unknown): unknown {
 
 function auditInput(toolName: ToolName, input: unknown): unknown {
   if (toolName === "upsert_product_backlog_evidence" && input && typeof input === "object") {
-    const body = input as { backlogKey?: unknown; evidence?: unknown };
-    return { backlogKey: body.backlogKey, evidenceCount: Array.isArray(body.evidence) ? body.evidence.length : 0 };
+    const body = input as { backlogKey?: unknown; evidence?: unknown; reason?: unknown };
+    return {
+      backlogKey: body.backlogKey,
+      evidenceCount: Array.isArray(body.evidence) ? body.evidence.length : 0,
+      reason: body.reason,
+    };
   }
   if (toolName !== "upload_nudge_photo" || !input || typeof input !== "object") {
     return input;
@@ -244,6 +248,15 @@ async function runWithAudit(
   handler: (input: unknown) => Promise<unknown>,
 ) {
   try {
+    if (toolName === "upsert_product_backlog_evidence") {
+      await appendAuditEvent(config.auditLogPath, {
+        timestamp: new Date().toISOString(),
+        toolName,
+        input: auditInput(toolName, input),
+        endpoint,
+        status: "attempt",
+      });
+    }
     const data = await handler(input);
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),

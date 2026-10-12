@@ -7,7 +7,7 @@ export type AuditEvent = {
   toolName: string;
   input: unknown;
   endpoint: string;
-  status: "success" | "failure";
+  status: "attempt" | "success" | "failure";
   metadata?: Record<string, unknown>;
 };
 
