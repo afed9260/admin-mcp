@@ -8,6 +8,7 @@ import { createDialogTools } from "./dialog-tools.js";
 import { createGrowthCampaignTools } from "./growth-campaign-tools.js";
 import { createLifecycleMarketingTools } from "./lifecycle-marketing-tools.js";
 import { createNudgeTools } from "./nudge-tools.js";
+import { createProductBacklogTools } from "./product-backlog-tools.js";
 import {
   broadRelaunchCampaignQuerySchema,
   broadRelaunchCompensationDryRunSchema,
@@ -35,6 +36,9 @@ import {
   nudgeRuleToggleSchema,
   nudgeRuleUpdateSchema,
   nudgeTestSendSchema,
+  productBacklogByKeySchema,
+  productBacklogEvidenceUpsertSchema,
+  productBacklogListSchema,
   referralManualReviewApproveSchema,
   referralManualReviewListSchema,
   referralManualReviewRejectSchema,
@@ -85,6 +89,8 @@ export const readonlyToolNames = [
   "get_customer_operations_profile",
   "get_customer_billing_reconciliation",
   "list_referral_manual_review_items",
+  "list_product_backlog_items",
+  "get_product_backlog_item_by_key",
   "list_reactivation_campaign_runs",
   "list_reactivation_campaign_audience",
   "get_reactivation_campaign_state",
@@ -128,6 +134,7 @@ export const writeToolNames = [
   "apply_successful_dialog_existing_slot_recovery",
   "approve_referral_manual_review_grant",
   "reject_referral_manual_review_grant",
+  "upsert_product_backlog_evidence",
 ] as const;
 
 type ToolName =
@@ -180,7 +187,13 @@ async function appendAuditEventSafely(
   }
 }
 
-function successMetadata(data: unknown): Record<string, unknown> | undefined {
+function successMetadata(data: unknown, toolName: ToolName): Record<string, unknown> | undefined {
+  if (toolName === "upsert_product_backlog_evidence" && data && typeof data === "object" && "data" in data) {
+    const result = data.data;
+    if (result && typeof result === "object" && "action" in result) {
+      return { action: result.action };
+    }
+  }
   if (Array.isArray(data)) {
     return { itemCount: data.length };
   }
@@ -199,7 +212,25 @@ function failureMetadata(error: unknown): Record<string, unknown> {
   return { error: error instanceof Error ? error.message : String(error) };
 }
 
+function safeToolError(toolName: ToolName, error: unknown): unknown {
+  if (toolName === "list_product_backlog_items" || toolName === "get_product_backlog_item_by_key"
+    || toolName === "upsert_product_backlog_evidence") {
+    const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
+    return new Error(status === 409 ? "Product backlog conflict" : "Product backlog request failed");
+  }
+  return error;
+}
+
 function auditInput(toolName: ToolName, input: unknown): unknown {
+  if (toolName === "upsert_product_backlog_evidence" && input && typeof input === "object") {
+    const body = input as { backlogKey?: unknown; evidence?: unknown; reason?: unknown; reviewFingerprint?: unknown };
+    return {
+      backlogKey: body.backlogKey,
+      evidenceCount: Array.isArray(body.evidence) ? body.evidence.length : 0,
+      reason: body.reason,
+      reviewFingerprint: body.reviewFingerprint,
+    };
+  }
   if (toolName !== "upload_nudge_photo" || !input || typeof input !== "object") {
     return input;
   }
@@ -218,6 +249,15 @@ async function runWithAudit(
   handler: (input: unknown) => Promise<unknown>,
 ) {
   try {
+    if (toolName === "upsert_product_backlog_evidence") {
+      await appendAuditEvent(config.auditLogPath, {
+        timestamp: new Date().toISOString(),
+        toolName,
+        input: auditInput(toolName, input),
+        endpoint,
+        status: "attempt",
+      });
+    }
     const data = await handler(input);
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
@@ -225,19 +265,20 @@ async function runWithAudit(
       input: auditInput(toolName, input),
       endpoint,
       status: "success",
-      metadata: successMetadata(data),
+      metadata: successMetadata(data, toolName),
     });
     return toolResponse(data);
   } catch (error) {
+    const safeError = safeToolError(toolName, error);
     await appendAuditEventSafely(config, {
       timestamp: new Date().toISOString(),
       toolName,
       input: auditInput(toolName, input),
       endpoint,
       status: "failure",
-      metadata: failureMetadata(error),
+      metadata: failureMetadata(safeError),
     });
-    throw error;
+    throw safeError;
   }
 }
 
@@ -254,6 +295,7 @@ function registerTools(
   const nudgeTools = createNudgeTools(client);
   const supportTools = createSupportTools(client);
   const customerOperationsTools = createCustomerOperationsTools(client);
+  const productBacklogTools = createProductBacklogTools(client);
 
   server.registerTool(
     "get_funnel_stats",
@@ -557,6 +599,26 @@ function registerTools(
         input,
         customerOperationsTools.listReferralManualReviewItems,
       ),
+  );
+
+  server.registerTool(
+    "list_product_backlog_items",
+    {
+      description: "List at most 100 recent product backlog items; includes archived when requested and reports truncation.",
+      inputSchema: inputSchema(productBacklogListSchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) => runWithAudit(config, "list_product_backlog_items", "/product-backlog/items", input, productBacklogTools.listItems),
+  );
+
+  server.registerTool(
+    "get_product_backlog_item_by_key",
+    {
+      description: "Read one product backlog item by stable metadata key, including archived items.",
+      inputSchema: inputSchema(productBacklogByKeySchema),
+      annotations: readOnlyAnnotations,
+    },
+    (input) => runWithAudit(config, "get_product_backlog_item_by_key", "/product-backlog/items/by-key/{backlogKey}", input, productBacklogTools.getByKey),
   );
 
   server.registerTool(
@@ -1191,6 +1253,16 @@ function registerTools(
         input,
         customerOperationsTools.rejectReferralManualReviewGrant,
       ),
+  );
+
+  server.registerTool(
+    "upsert_product_backlog_evidence",
+    {
+      description: "Add evidence to an exact existing product backlog item or create one inbox item. Creation additionally requires semanticReviewConfirmed=true and a fresh reviewFingerprint from the complete includeArchived=true list, after manual semantic comparison. Never changes existing priority, status, or owner.",
+      inputSchema: inputSchema(productBacklogEvidenceUpsertSchema),
+      annotations: writeAnnotations,
+    },
+    (input) => runWithAudit(config, "upsert_product_backlog_evidence", "/product-backlog/items/evidence-upsert", input, productBacklogTools.upsertEvidence),
   );
 }
 

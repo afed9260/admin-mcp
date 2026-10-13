@@ -8,6 +8,7 @@ import {
   realpathSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -242,9 +243,12 @@ describe("Windows support autopilot lifecycle scripts", () => {
     mkdirSync(stateRoot, { recursive: true });
     mkdirSync(credentialRoot, { recursive: true });
     writeFileSync(path.join(adminRoot, "package.json"), '{"type":"module"}', "utf8");
-    cpSync(realpathSync(path.resolve("node_modules", "zod")), path.join(adminRoot, "node_modules", "zod"), {
-      recursive: true,
-    });
+    mkdirSync(path.join(adminRoot, "node_modules"), { recursive: true });
+    symlinkSync(
+      realpathSync(path.resolve("node_modules", "zod")),
+      path.join(adminRoot, "node_modules", "zod"),
+      "junction",
+    );
 
     for (const name of [
       "support-autopilot-credential-supervisor-main.js",
@@ -447,9 +451,12 @@ describe("Windows support autopilot lifecycle scripts", () => {
     mkdirSync(stateRoot, { recursive: true });
     mkdirSync(credentialRoot, { recursive: true });
     writeFileSync(path.join(adminRoot, "package.json"), '{"type":"module"}', "utf8");
-    cpSync(realpathSync(path.resolve("node_modules", "zod")), path.join(adminRoot, "node_modules", "zod"), {
-      recursive: true,
-    });
+    mkdirSync(path.join(adminRoot, "node_modules"), { recursive: true });
+    symlinkSync(
+      realpathSync(path.resolve("node_modules", "zod")),
+      path.join(adminRoot, "node_modules", "zod"),
+      "junction",
+    );
     for (const name of [
       "support-autopilot-credential-supervisor-main.js",
       "support-autopilot-credential-supervisor.js",
@@ -674,7 +681,7 @@ describe("Windows support autopilot lifecycle scripts", () => {
     writeFileSync(delayedScript, [
       "Start-Sleep -Seconds 30",
     ].join("\r\n"), "utf8");
-    writeFileSync(harnessScript, [
+    writeFileSync(harnessScript, "\uFEFF" + [
       `$ErrorActionPreference = 'Stop'`,
       `. ${quote(helperScript)}`,
       `$helper = Start-Process -FilePath 'powershell.exe' -ArgumentList @(`,

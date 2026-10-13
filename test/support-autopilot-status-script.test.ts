@@ -75,7 +75,7 @@ describe("support autopilot status script", () => {
     const harnessPath = path.join(root, "status-harness.ps1");
     const statusScript = path.resolve("scripts", "get-support-autopilot-status.ps1");
     const commandLine = `\"${process.execPath}\" \"${runnerMain}\"`;
-    writeFileSync(harnessPath, [
+    writeFileSync(harnessPath, "\uFEFF" + [
       "function Get-ScheduledTask {",
       "  param([string]$TaskName, [object]$ErrorAction)",
       "  [pscustomobject]@{ TaskName = $TaskName; State = 'Ready' }",
